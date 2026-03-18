@@ -16,7 +16,7 @@ interface AuthContextType {
   user: AppUser | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ error?: string }>;
-  signup: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error?: string }>;
+  signup: (email: string, password: string, fullName: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -92,12 +92,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {};
   }, []);
 
-  const signup = useCallback(async (email: string, password: string, fullName: string, role: UserRole) => {
+  const signup = useCallback(async (email: string, password: string, fullName: string) => {
     setIsLoading(true);
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName, role } },
+      options: { data: { full_name: fullName } },
     });
     if (error) {
       setIsLoading(false);

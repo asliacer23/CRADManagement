@@ -22,7 +22,7 @@ export const RemarksPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <div>
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2"><MessageSquare size={20} className="text-primary" /> Remarks & Feedback</h1>
         <p className="text-sm text-muted-foreground">View and add feedback for your advisees</p>

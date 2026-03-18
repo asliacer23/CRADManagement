@@ -26,10 +26,10 @@ export const SystemSettingsPage: React.FC = () => {
     } catch (err: any) { show(err.message, "error"); }
   };
 
-  if (isLoading) return <div className="max-w-2xl mx-auto space-y-4">{[1,2,3].map(i => <div key={i} className="h-16 skeleton-shimmer rounded-xl" />)}</div>;
+  if (isLoading) return <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-16 skeleton-shimmer rounded-xl" />)}</div>;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2"><Settings size={20} className="text-primary" /> System Settings</h1>
         <p className="text-sm text-muted-foreground">Configure system-wide settings</p>

@@ -29,7 +29,7 @@ export const SubmitResearchPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2"><FileText size={20} className="text-primary" /> Submit Research</h1>
         <p className="text-sm text-muted-foreground mt-1">Fill out the form below to submit your research proposal</p>

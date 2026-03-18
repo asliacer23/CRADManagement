@@ -18,10 +18,10 @@ export const NotificationsPage: React.FC = () => {
   const markAllRead = useMarkAllRead();
   const unreadCount = notifications?.filter((n: any) => !n.is_read).length || 0;
 
-  if (isLoading) return <div className="max-w-2xl mx-auto space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 skeleton-shimmer rounded-xl" />)}</div>;
+  if (isLoading) return <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 skeleton-shimmer rounded-xl" />)}</div>;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2"><Bell size={20} className="text-primary" /> Notifications</h1>

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "./useAuth";
 
 // ==================== RESEARCH ====================
@@ -137,10 +138,26 @@ export function useManuscripts(researchId?: string) {
     queryFn: async () => {
       let query = supabase
         .from("manuscripts")
-        .select("*, research(title, research_code, submitted_by), profiles!uploaded_by(full_name)")
+        .select("*, research(title, research_code, submitted_by), uploaded_by_profile:profiles!uploaded_by(full_name), reviewed_by_profile:profiles!reviewed_by(full_name)")
         .order("created_at", { ascending: false });
       if (researchId) query = query.eq("research_id", researchId);
       const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useManuscriptHistory(researchId: string) {
+  return useQuery({
+    queryKey: ["manuscript-history", researchId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("manuscripts")
+        .select("*, uploaded_by_profile:profiles!uploaded_by(full_name), reviewed_by_profile:profiles!reviewed_by(full_name)")
+        .eq("research_id", researchId)
+        .order("version_number", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -242,7 +259,7 @@ export function usePendingPayments() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payments")
-        .select("*, research(title, research_code), profiles!submitted_by(full_name)")
+        .select("*, research(title, research_code), submitted_by_profile:profiles!submitted_by(full_name)")
         .in("status", ["pending", "submitted"])
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -263,11 +280,24 @@ export function useSubmitPayment() {
       const { error: uploadErr } = await supabase.storage.from("payment-proofs").upload(filePath, file);
       if (uploadErr) throw uploadErr;
 
+      let paymentAmount = amount;
+      if (paymentAmount == null) {
+        const { data: feeSetting, error: feeError } = await supabase
+          .from("system_settings")
+          .select("value")
+          .eq("key", "research_fee")
+          .maybeSingle();
+        if (feeError) throw feeError;
+
+        const parsedFee = Number(feeSetting?.value);
+        paymentAmount = Number.isFinite(parsedFee) && parsedFee > 0 ? parsedFee : 2500;
+      }
+
       const { data, error } = await supabase
         .from("payments")
         .insert({
           research_id: researchId,
-          amount: amount || 2500,
+          amount: paymentAmount,
           proof_url: filePath,
           proof_file_name: file.name,
           status: "submitted",
@@ -313,7 +343,28 @@ export function useVerifyPayment() {
       qc.invalidateQueries({ queryKey: ["pending-payments"] });
       qc.invalidateQueries({ queryKey: ["my-payments"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["all-payments"] });
     },
+  });
+}
+
+export function useAllPayments(status?: Database["public"]["Enums"]["payment_status"]) {
+  return useQuery({
+    queryKey: ["all-payments", status],
+    queryFn: async () => {
+      let query = supabase
+        .from("payments")
+        .select("*, research(title, research_code), submitted_by_profile:profiles!submitted_by(full_name), verified_by_profile:profiles!verified_by(full_name)");
+      
+      if (status) {
+        query = query.eq("status", status);
+      }
+      
+      const { data, error } = await query.order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 1000 * 60,
   });
 }
 
@@ -550,11 +601,11 @@ export function useUnassignedResearch() {
       const { data: assigned } = await supabase.from("adviser_assignments").select("research_id");
       const assignedIds = assigned?.map((a: any) => a.research_id) || [];
 
-      let query = supabase.from("research").select("*, profiles!submitted_by(full_name), departments(name, code)").order("created_at", { ascending: false });
+      let query = supabase.from("research").select("*, profiles!submitted_by(full_name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name))").order("created_at", { ascending: false });
       if (assignedIds.length > 0) {
         const { data, error } = await supabase
           .from("research")
-          .select("*, profiles!submitted_by(full_name), departments(name, code)")
+          .select("*, profiles!submitted_by(full_name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name))")
           .not("id", "in", `(${assignedIds.join(",")})`)
           .order("created_at", { ascending: false });
         if (error) throw error;
@@ -572,12 +623,24 @@ export function useAdvisers() {
   return useQuery({
     queryKey: ["advisers"],
     queryFn: async () => {
-      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "adviser");
-      if (!roles?.length) return [];
-      const ids = roles.map((r: any) => r.user_id);
-      const { data, error } = await supabase.from("profiles").select("*").in("user_id", ids);
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("full_name");
       if (error) throw error;
-      return data;
+      if (!profiles?.length) return [];
+
+      const roles = await Promise.all(
+        profiles.map(async (profile: any) => {
+          const { data: role, error: roleError } = await supabase.rpc("get_user_role", { _user_id: profile.user_id });
+          if (roleError) throw roleError;
+          return { profile, role };
+        })
+      );
+
+      return roles
+        .filter(({ role }) => role === "adviser")
+        .map(({ profile }) => profile);
     },
     staleTime: 1000 * 60 * 5,
   });
@@ -608,7 +671,113 @@ export function useAssignAdviser() {
       qc.invalidateQueries({ queryKey: ["unassigned-research"] });
       qc.invalidateQueries({ queryKey: ["all-research"] });
       qc.invalidateQueries({ queryKey: ["adviser-research"] });
+      qc.invalidateQueries({ queryKey: ["adviser-workload"] });
     },
+  });
+}
+
+export function useAssignMultipleAdvisers() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ researchId, adviserIds, title }: {
+      researchId: string; adviserIds: string[]; title: string;
+    }) => {
+      const { data: research } = await supabase.from("research").select("submitted_by").eq("id", researchId).single();
+
+      const assignments = adviserIds.map((adviserId) => ({
+        research_id: researchId,
+        adviser_id: adviserId,
+        assigned_by: user!.id,
+      }));
+
+      const { error } = await supabase
+        .from("adviser_assignments")
+        .insert(assignments);
+      if (error) throw error;
+
+      // Send notifications for each assigned adviser
+      Promise.all(
+        adviserIds.map((adviserId) =>
+          supabase.functions.invoke("notify", {
+            body: {
+              action: "adviser_assigned",
+              data: { student_id: research?.submitted_by, adviser_id: adviserId, research_id: researchId, title, actor_id: user!.id },
+            },
+          }).catch(() => {})
+        )
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["unassigned-research"] });
+      qc.invalidateQueries({ queryKey: ["all-research"] });
+      qc.invalidateQueries({ queryKey: ["adviser-research"] });
+      qc.invalidateQueries({ queryKey: ["adviser-workload"] });
+      qc.invalidateQueries({ queryKey: ["my-research"] });
+    },
+  });
+}
+
+export function useRemoveAdviserAssignment() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ researchId, adviserId }: {
+      researchId: string; adviserId: string;
+    }) => {
+      const { error } = await supabase
+        .from("adviser_assignments")
+        .delete()
+        .eq("research_id", researchId)
+        .eq("adviser_id", adviserId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["unassigned-research"] });
+      qc.invalidateQueries({ queryKey: ["all-research"] });
+      qc.invalidateQueries({ queryKey: ["adviser-research"] });
+      qc.invalidateQueries({ queryKey: ["adviser-workload"] });
+      qc.invalidateQueries({ queryKey: ["my-research"] });
+    },
+  });
+}
+
+export function useAdviserWorkload() {
+  return useQuery({
+    queryKey: ["adviser-workload"],
+    queryFn: async () => {
+      const { data: advisers, error: adviserError } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("full_name");
+      if (adviserError) throw adviserError;
+      if (!advisers?.length) return [];
+
+      const roles = await Promise.all(
+        advisers.map(async (profile: any) => {
+          const { data: role, error: roleError } = await supabase.rpc("get_user_role", { _user_id: profile.user_id });
+          if (roleError) throw roleError;
+          return { profile, role };
+        })
+      );
+
+      const adviserProfiles = roles
+        .filter(({ role }) => role === "adviser")
+        .map(({ profile }) => profile);
+
+      const { data: assignments } = await supabase
+        .from("adviser_assignments")
+        .select("adviser_id, research_id, research(title, status)");
+
+      const workload = adviserProfiles.map((profile: any) => {
+        const assignedCount = assignments?.filter((a: any) => a.adviser_id === profile.user_id).length || 0;
+        const assignedResearch = assignments?.filter((a: any) => a.adviser_id === profile.user_id) || [];
+        return { ...profile, assignedCount, assignedResearch };
+      });
+
+      return workload.sort((a, b) => a.assignedCount - b.assignedCount);
+    },
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -832,5 +1001,92 @@ export function useResearchChartData() {
       return data;
     },
     staleTime: 1000 * 60 * 5,
+  });
+}
+
+// ==================== PROFILE ====================
+export function useUserProfile() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["user-profile", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", user!.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useUpdateUserProfile() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ fullName, department, studentId }: {
+      fullName?: string; department?: string; studentId?: string;
+    }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          ...(fullName && { full_name: fullName }),
+          ...(department !== undefined && { department }),
+          ...(studentId !== undefined && { student_id: studentId }),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["user-profile"] });
+    },
+  });
+}
+
+export function useUploadAvatar() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      // Delete old avatar if exists
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("user_id", user!.id)
+        .single();
+
+      if (profile?.avatar_url) {
+        const oldFilePath = profile.avatar_url;
+        await supabase.storage.from("avatars").remove([oldFilePath]).catch(() => {});
+      }
+
+      // Upload new avatar
+      const filePath = `${user!.id}/${Date.now()}_${file.name}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file);
+      if (uploadErr) throw uploadErr;
+
+      // Get public URL
+      const { data: publicUrl } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      // Update profile with avatar URL
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl.publicUrl, updated_at: new Date().toISOString() })
+        .eq("user_id", user!.id);
+      if (updateErr) throw updateErr;
+
+      return publicUrl.publicUrl;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["user-profile"] });
+    },
   });
 }

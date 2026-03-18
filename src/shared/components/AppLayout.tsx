@@ -1,11 +1,13 @@
-import React, { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import React, { useState, useMemo } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, type UserRole } from "@/shared/hooks/useAuth";
+import { useUserProfile } from "@/shared/hooks/useSupabaseData";
 import { ThemeToggle } from "@/shared/components/ThemeToggle";
+import { CommandPalette } from "@/shared/components/CommandPalette";
 import {
   LayoutDashboard, FileText, Upload, CreditCard, Bell, Calendar, ClipboardCheck,
   MessageSquare, Users, Settings, LogOut, Menu, X, ChevronLeft, Search,
-  BookOpen, Archive, Megaphone, UserCheck, ShieldCheck
+  BookOpen, Archive, Megaphone, UserCheck, ShieldCheck, User
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -18,6 +20,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: <LayoutDashboard size={18} />, roles: ["student", "adviser", "staff", "admin"] },
+  { label: "My Profile", path: "/profile", icon: <User size={18} />, roles: ["student", "adviser", "staff", "admin"] },
   { label: "Submit Research", path: "/research/submit", icon: <FileText size={18} />, roles: ["student"] },
   { label: "My Research", path: "/research/my", icon: <BookOpen size={18} />, roles: ["student"] },
   { label: "Upload Manuscript", path: "/manuscripts/upload", icon: <Upload size={18} />, roles: ["student"] },
@@ -40,11 +43,52 @@ const navItems: NavItem[] = [
 
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
+  const { data: profile } = useUserProfile();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const location = useLocation();
 
   const userNav = navItems.filter((n) => user && n.roles.includes(user.role));
+
+  const commandItems = useMemo(() => {
+    if (!user) return [];
+    
+    const items = [...userNav.map((nav) => ({
+      id: nav.path,
+      label: nav.label,
+      description: `Go to ${nav.label.toLowerCase()}`,
+      icon: nav.icon,
+      category: "Navigation",
+      action: () => { navigate(nav.path); setPaletteOpen(false); },
+    }))];
+
+    // Add common actions
+    items.push({
+      id: "logout",
+      label: "Logout",
+      description: "Sign out of your account",
+      icon: <LogOut size={16} />,
+      category: "Account",
+      action: () => { logout(); setPaletteOpen(false); },
+    });
+
+    items.push({
+      id: "theme-toggle",
+      label: "Toggle Theme",
+      description: "Switch between light and dark mode",
+      icon: <Settings size={16} />,
+      category: "Settings",
+      action: () => { 
+        const html = document.documentElement;
+        html.classList.toggle("dark");
+        setPaletteOpen(false);
+      },
+    });
+
+    return items;
+  }, [user, navigate, logout]);
 
   const roleBadge: Record<UserRole, string> = {
     student: "bg-secondary/15 text-secondary",
@@ -112,9 +156,17 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         <div className="border-t border-sidebar-border p-3">
           {user && (
             <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
-              <div className="h-8 w-8 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold text-sidebar-foreground">{user.name[0]}</span>
-              </div>
+              {profile?.avatar_url ? (
+                <img 
+                  src={profile.avatar_url} 
+                  alt={user.name} 
+                  className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-bold text-sidebar-foreground">{user.name[0]}</span>
+                </div>
+              )}
               {!collapsed && (
                 <div className="flex-1 min-w-0 animate-fade-in">
                   <p className="text-xs font-semibold text-sidebar-foreground truncate">{user.name}</p>
@@ -136,19 +188,37 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex items-center gap-3 px-4 lg:px-6 h-14 border-b border-border bg-card/50 backdrop-blur-sm flex-shrink-0">
-          <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-muted">
-            <Menu size={20} className="text-foreground" />
-          </button>
-          <div className="flex-1 flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60 text-muted-foreground max-w-xs flex-1">
-              <Search size={14} />
-              <span className="text-xs">Search... ⌘K</span>
+        <header className="w-full h-14 border-b border-border bg-card/50 backdrop-blur-sm flex-shrink-0">
+          <div className="flex items-center justify-between px-4 lg:px-6 h-full gap-3">
+            {/* Left: Menu button */}
+            <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-muted flex-shrink-0">
+              <Menu size={20} className="text-foreground" />
+            </button>
+            
+            {/* Center: Search bar */}
+            <button 
+              onClick={() => setPaletteOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-4 py-1.5 rounded-lg bg-muted/60 text-muted-foreground hover:bg-muted transition-colors cursor-pointer group flex-shrink-0"
+            >
+              <Search size={14} className="group-hover:text-foreground transition-colors" />
+              <span className="text-xs group-hover:text-foreground transition-colors">Search... ⌘K</span>
+            </button>
+            
+            {/* Right: Theme toggle & Profile */}
+            <div className="flex items-center gap-3 ml-auto flex-shrink-0">
+              <ThemeToggle />
+              {profile?.avatar_url ? (
+                <img 
+                  src={profile.avatar_url} 
+                  alt={user?.name} 
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-xs font-bold text-primary">{user?.name[0]}</span>
+                </div>
+              )}
             </div>
-          </div>
-          <ThemeToggle />
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-xs font-bold text-primary">{user?.name[0]}</span>
           </div>
         </header>
 
@@ -175,6 +245,9 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
           ))}
         </nav>
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette items={commandItems} open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 };

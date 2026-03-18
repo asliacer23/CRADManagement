@@ -25,6 +25,7 @@ import { ManageUsersPage } from "@/features/admin/pages/ManageUsersPage";
 import { AllResearchPage } from "@/features/admin/pages/AllResearchPage";
 import { SystemSettingsPage } from "@/features/admin/pages/SystemSettingsPage";
 import { AuditLogsPage } from "@/features/admin/pages/AuditLogsPage";
+import { ProfilePage } from "@/features/profile/pages/ProfilePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -56,6 +57,7 @@ const ProtectedRoutes = () => {
         <Route path="/admin/research" element={<AllResearchPage />} />
         <Route path="/admin/settings" element={<SystemSettingsPage />} />
         <Route path="/admin/logs" element={<AuditLogsPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AppLayout>

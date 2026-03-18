@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useAuth, type UserRole } from "@/shared/hooks/useAuth";
+import { useAuth } from "@/shared/hooks/useAuth";
 import { useSnackbar } from "@/shared/components/SnackbarProvider";
 import logo from "@/assets/logo.png";
 
@@ -10,7 +10,6 @@ export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<UserRole>("student");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,22 +17,16 @@ export const LoginPage: React.FC = () => {
       if (!fullName.trim()) { show("Please enter your full name", "error"); return; }
       if (!email.trim()) { show("Please enter your email", "error"); return; }
       if (password.length < 6) { show("Password must be at least 6 characters", "error"); return; }
-      const { error } = await signup(email, password, fullName, role);
+      const { error } = await signup(email, password, fullName);
       if (error) show(error, "error");
       else show("Account created successfully!", "success");
-    } else {
-      if (!email.trim() || !password.trim()) { show("Please enter email and password", "error"); return; }
-      const { error } = await login(email, password);
-      if (error) show(error, "error");
+      return;
     }
-  };
 
-  const roles: { value: UserRole; label: string; desc: string }[] = [
-    { value: "student", label: "Student", desc: "Submit & track research" },
-    { value: "adviser", label: "Adviser", desc: "Review & approve manuscripts" },
-    { value: "staff", label: "Staff", desc: "Manage schedules & payments" },
-    { value: "admin", label: "Admin", desc: "Full system administration" },
-  ];
+    if (!email.trim() || !password.trim()) { show("Please enter email and password", "error"); return; }
+    const { error } = await login(email, password);
+    if (error) show(error, "error");
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -68,36 +61,16 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignup && (
-              <>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Full Name</label>
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Juan Dela Cruz"
-                    className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Role</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {roles.map((r) => (
-                      <button
-                        key={r.value}
-                        type="button"
-                        onClick={() => setRole(r.value)}
-                        className={`p-3 rounded-lg border text-left transition-all min-h-[44px] ${
-                          role === r.value ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:border-primary/30"
-                        }`}
-                      >
-                        <p className={`text-sm font-semibold ${role === r.value ? "text-primary" : "text-foreground"}`}>{r.label}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{r.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Full Name</label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Juan Dela Cruz"
+                  className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary transition-colors"
+                />
+              </div>
             )}
 
             <div>
