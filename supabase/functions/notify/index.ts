@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -20,13 +20,12 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "research_submitted": {
-        // Notify all staff and admins about new research
         const { data: staffRoles } = await supabase
           .from("user_roles")
           .select("user_id")
           .in("role", ["staff", "admin"]);
 
-        if (staffRoles) {
+        if (staffRoles?.length) {
           const notifications = staffRoles.map((r: any) => ({
             user_id: r.user_id,
             type: "research",
@@ -77,9 +76,8 @@ Deno.serve(async (req) => {
       }
 
       case "defense_scheduled": {
-        // Notify research submitter and adviser
         const userIds = data.user_ids || [];
-        const notifications = userIds.map((uid: string) => ({
+        const notifications = userIds.filter(Boolean).map((uid: string) => ({
           user_id: uid,
           type: "defense",
           title: "Defense Scheduled",
@@ -94,35 +92,82 @@ Deno.serve(async (req) => {
       }
 
       case "adviser_assigned": {
-        await supabase.from("notifications").insert([
-          {
+        const notifs = [];
+        if (data.student_id) {
+          notifs.push({
             user_id: data.student_id,
             type: "research",
             title: "Adviser Assigned",
             message: `An adviser has been assigned to your research "${data.title}".`,
             reference_id: data.research_id,
             reference_type: "research",
-          },
-          {
+          });
+        }
+        if (data.adviser_id) {
+          notifs.push({
             user_id: data.adviser_id,
             type: "research",
             title: "New Research Assignment",
             message: `You have been assigned as adviser for "${data.title}".`,
             reference_id: data.research_id,
             reference_type: "research",
-          },
-        ]);
+          });
+        }
+        if (notifs.length) await supabase.from("notifications").insert(notifs);
         break;
       }
 
       case "remark_added": {
+        if (data.student_id) {
+          await supabase.from("notifications").insert({
+            user_id: data.student_id,
+            type: "manuscript",
+            title: "New Remark from Adviser",
+            message: `Your adviser left a remark on "${data.title}".`,
+            reference_id: data.research_id,
+            reference_type: "research",
+          });
+        }
+        break;
+      }
+
+      case "announcement_created": {
+        // Notify all users
+        const { data: allUsers } = await supabase
+          .from("profiles")
+          .select("user_id");
+        if (allUsers?.length) {
+          const notifications = allUsers
+            .filter((u: any) => u.user_id !== data.actor_id)
+            .map((u: any) => ({
+              user_id: u.user_id,
+              type: "announcement",
+              title: "New Announcement",
+              message: `"${data.title}" — Check announcements for details.`,
+              reference_id: data.announcement_id,
+              reference_type: "announcement",
+            }));
+          if (notifications.length) await supabase.from("notifications").insert(notifications);
+        }
+        break;
+      }
+
+      case "role_changed": {
         await supabase.from("notifications").insert({
-          user_id: data.student_id,
-          type: "manuscript",
-          title: "New Remark from Adviser",
-          message: `Your adviser left a remark on "${data.title}".`,
-          reference_id: data.research_id,
-          reference_type: "research",
+          user_id: data.user_id,
+          type: "system",
+          title: "Role Updated",
+          message: `Your role has been updated to "${data.new_role}".`,
+        });
+        break;
+      }
+
+      case "user_created_by_admin": {
+        await supabase.from("notifications").insert({
+          user_id: data.user_id,
+          type: "system",
+          title: "Welcome to CRAD",
+          message: `Your account has been created. You are registered as "${data.role}".`,
         });
         break;
       }
@@ -135,13 +180,15 @@ Deno.serve(async (req) => {
     }
 
     // Create audit log
-    await supabase.from("audit_logs").insert({
-      user_id: data.actor_id || null,
-      action: action.toUpperCase(),
-      details: `Notification: ${action}`,
-      entity_type: data.reference_type || "notification",
-      entity_id: data.reference_id || null,
-    });
+    if (data.actor_id) {
+      await supabase.from("audit_logs").insert({
+        user_id: data.actor_id,
+        action: action.toUpperCase(),
+        details: `Notification: ${action}`,
+        entity_type: data.reference_type || "notification",
+        entity_id: data.reference_id || null,
+      }).catch(() => {});
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
