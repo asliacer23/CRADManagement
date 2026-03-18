@@ -10,13 +10,14 @@ export function useMyResearch() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("research")
-        .select("*, research_categories(name), departments(name, code), adviser_assignments(adviser_id, profiles:adviser_id(full_name)), research_members(member_name, is_leader)")
+        .select("*, research_categories(name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name)), research_members(member_name, is_leader)")
         .eq("submitted_by", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -26,11 +27,12 @@ export function useAllResearch() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("research")
-        .select("*, profiles:submitted_by(full_name), research_categories(name), adviser_assignments(adviser_id, profiles:adviser_id(full_name))")
+        .select("*, profiles!submitted_by(full_name), research_categories(name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name)), research_members(member_name, is_leader)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -48,13 +50,14 @@ export function useResearchByAdviser() {
       if (ids.length === 0) return [];
       const { data, error } = await supabase
         .from("research")
-        .select("*, profiles:submitted_by(full_name), research_categories(name), research_members(member_name)")
+        .select("*, profiles!submitted_by(full_name), research_categories(name), research_members(member_name, is_leader)")
         .in("id", ids)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -83,19 +86,10 @@ export function useSubmitResearch() {
         }
       }
 
-      // Trigger notification
-      await supabase.functions.invoke("notify", {
+      // Fire notification in background (don't block)
+      supabase.functions.invoke("notify", {
         body: { action: "research_submitted", data: { title, research_id: research.id, actor_id: user!.id } },
-      });
-
-      // Audit log
-      await supabase.from("audit_logs").insert({
-        user_id: user!.id,
-        action: "SUBMIT_RESEARCH",
-        details: `Research "${title}" submitted`,
-        entity_type: "research",
-        entity_id: research.id,
-      });
+      }).catch(() => {});
 
       return research;
     },
@@ -120,17 +114,18 @@ export function useUpdateResearchStatus() {
         .eq("id", researchId);
       if (error) throw error;
 
-      await supabase.functions.invoke("notify", {
+      supabase.functions.invoke("notify", {
         body: {
           action: "research_status_changed",
           data: { user_id: userId, research_id: researchId, status, title, actor_id: user!.id },
         },
-      });
+      }).catch(() => {});
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-research"] });
       qc.invalidateQueries({ queryKey: ["my-research"] });
       qc.invalidateQueries({ queryKey: ["adviser-research"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
   });
 }
@@ -142,13 +137,14 @@ export function useManuscripts(researchId?: string) {
     queryFn: async () => {
       let query = supabase
         .from("manuscripts")
-        .select("*, research(title, research_code, submitted_by), profiles:uploaded_by(full_name)")
+        .select("*, research(title, research_code, submitted_by), profiles!uploaded_by(full_name)")
         .order("created_at", { ascending: false });
       if (researchId) query = query.eq("research_id", researchId);
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -159,7 +155,6 @@ export function useUploadManuscript() {
     mutationFn: async ({ researchId, file, versionNotes }: {
       researchId: string; file: File; versionNotes: string;
     }) => {
-      // Get next version number
       const { data: existing } = await supabase
         .from("manuscripts")
         .select("version_number")
@@ -168,14 +163,11 @@ export function useUploadManuscript() {
         .limit(1);
       const nextVersion = (existing?.[0]?.version_number || 0) + 1;
 
-      // Upload file
       const filePath = `${user!.id}/${researchId}/${Date.now()}_${file.name}`;
       const { error: uploadErr } = await supabase.storage
         .from("manuscripts")
         .upload(filePath, file);
       if (uploadErr) throw uploadErr;
-
-      const { data: { publicUrl } } = supabase.storage.from("manuscripts").getPublicUrl(filePath);
 
       const { data, error } = await supabase
         .from("manuscripts")
@@ -212,12 +204,12 @@ export function useUpdateManuscriptStatus() {
         .eq("id", manuscriptId);
       if (error) throw error;
 
-      await supabase.functions.invoke("notify", {
+      supabase.functions.invoke("notify", {
         body: {
           action: "manuscript_reviewed",
           data: { user_id: userId, manuscript_id: manuscriptId, status, title, actor_id: user!.id },
         },
-      });
+      }).catch(() => {});
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["manuscripts"] });
@@ -240,6 +232,7 @@ export function useMyPayments() {
       return data;
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -249,12 +242,13 @@ export function usePendingPayments() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payments")
-        .select("*, research(title, research_code), profiles:submitted_by(full_name)")
+        .select("*, research(title, research_code), profiles!submitted_by(full_name)")
         .in("status", ["pending", "submitted"])
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60,
   });
 }
 
@@ -288,6 +282,7 @@ export function useSubmitPayment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my-payments"] });
       qc.invalidateQueries({ queryKey: ["pending-payments"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
   });
 }
@@ -306,17 +301,18 @@ export function useVerifyPayment() {
       if (error) throw error;
 
       if (status === "verified") {
-        await supabase.functions.invoke("notify", {
+        supabase.functions.invoke("notify", {
           body: {
             action: "payment_verified",
             data: { user_id: userId, payment_id: paymentId, payment_code: paymentCode, actor_id: user!.id },
           },
-        });
+        }).catch(() => {});
       }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pending-payments"] });
       qc.invalidateQueries({ queryKey: ["my-payments"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
   });
 }
@@ -328,11 +324,12 @@ export function useDefenseSchedules() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("defense_schedules")
-        .select("*, research(title, research_code, submitted_by), defense_panel_members(panelist_id, role, profiles:panelist_id(full_name))")
+        .select("*, research(title, research_code, submitted_by), defense_panel_members(panelist_id, role, profiles!panelist_id(full_name))")
         .order("defense_date", { ascending: true });
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -356,19 +353,19 @@ export function useCreateDefense() {
         );
       }
 
-      // Notify
       const userIds = [data.research?.submitted_by, ...(panelistIds || [])].filter(Boolean);
-      await supabase.functions.invoke("notify", {
+      supabase.functions.invoke("notify", {
         body: {
           action: "defense_scheduled",
           data: { user_ids: userIds, title: data.research?.title, date, time, room, defense_id: data.id, actor_id: user!.id },
         },
-      });
+      }).catch(() => {});
 
       return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["defense-schedules"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
   });
 }
@@ -390,6 +387,26 @@ export function useNotifications() {
     },
     enabled: !!user,
     refetchInterval: 30000,
+    staleTime: 1000 * 15,
+  });
+}
+
+export function useUnreadCount() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["unread-count", user?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("is_read", false);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!user,
+    refetchInterval: 30000,
+    staleTime: 1000 * 15,
   });
 }
 
@@ -403,7 +420,10 @@ export function useMarkNotificationRead() {
         .eq("id", notificationId);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["unread-count"] });
+    },
   });
 }
 
@@ -419,7 +439,10 @@ export function useMarkAllRead() {
         .eq("is_read", false);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["unread-count"] });
+    },
   });
 }
 
@@ -430,12 +453,13 @@ export function useAnnouncements() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("announcements")
-        .select("*, profiles:created_by(full_name)")
+        .select("*, profiles!created_by(full_name)")
         .order("is_pinned", { ascending: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -450,7 +474,24 @@ export function useCreateAnnouncement() {
         .select()
         .single();
       if (error) throw error;
+
+      // Notify all users about announcement
+      supabase.functions.invoke("notify", {
+        body: { action: "announcement_created", data: { title, announcement_id: data.id, actor_id: user!.id } },
+      }).catch(() => {});
+
       return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+  });
+}
+
+export function useDeleteAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("announcements").delete().eq("id", id);
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
   });
@@ -463,13 +504,14 @@ export function useRemarks(researchId?: string) {
     queryFn: async () => {
       let query = supabase
         .from("remarks")
-        .select("*, profiles:author_id(full_name), research(title, research_code, submitted_by)")
+        .select("*, profiles!author_id(full_name), research(title, research_code, submitted_by)")
         .order("created_at", { ascending: false });
       if (researchId) query = query.eq("research_id", researchId);
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60,
   });
 }
 
@@ -487,12 +529,12 @@ export function useCreateRemark() {
         .single();
       if (error) throw error;
 
-      await supabase.functions.invoke("notify", {
+      supabase.functions.invoke("notify", {
         body: {
           action: "remark_added",
           data: { student_id: data.research?.submitted_by, research_id: researchId, title: data.research?.title, actor_id: user!.id },
         },
-      });
+      }).catch(() => {});
 
       return data;
     },
@@ -508,12 +550,11 @@ export function useUnassignedResearch() {
       const { data: assigned } = await supabase.from("adviser_assignments").select("research_id");
       const assignedIds = assigned?.map((a: any) => a.research_id) || [];
 
-      let query = supabase.from("research").select("*, profiles:submitted_by(full_name)").order("created_at", { ascending: false });
+      let query = supabase.from("research").select("*, profiles!submitted_by(full_name), departments(name, code)").order("created_at", { ascending: false });
       if (assignedIds.length > 0) {
-        // Get research NOT in assigned list
         const { data, error } = await supabase
           .from("research")
-          .select("*, profiles:submitted_by(full_name)")
+          .select("*, profiles!submitted_by(full_name), departments(name, code)")
           .not("id", "in", `(${assignedIds.join(",")})`)
           .order("created_at", { ascending: false });
         if (error) throw error;
@@ -523,6 +564,7 @@ export function useUnassignedResearch() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60,
   });
 }
 
@@ -537,6 +579,7 @@ export function useAdvisers() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -554,12 +597,12 @@ export function useAssignAdviser() {
         .insert({ research_id: researchId, adviser_id: adviserId, assigned_by: user!.id });
       if (error) throw error;
 
-      await supabase.functions.invoke("notify", {
+      supabase.functions.invoke("notify", {
         body: {
           action: "adviser_assigned",
           data: { student_id: research?.submitted_by, adviser_id: adviserId, research_id: researchId, title, actor_id: user!.id },
         },
-      });
+      }).catch(() => {});
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["unassigned-research"] });
@@ -576,12 +619,13 @@ export function useAuditLogs() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("audit_logs")
-        .select("*, profiles:user_id(full_name, email)")
+        .select("*, profiles!user_id(full_name, email)")
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60,
   });
 }
 
@@ -594,6 +638,7 @@ export function useSystemSettings() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 10,
   });
 }
 
@@ -617,12 +662,64 @@ export function useAllUsers() {
   return useQuery({
     queryKey: ["all-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch profiles and roles separately, then merge
+      const { data: profiles, error: pErr } = await supabase
         .from("profiles")
-        .select("*, user_roles(role)")
+        .select("*")
         .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      if (pErr) throw pErr;
+
+      const { data: roles, error: rErr } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+      if (rErr) throw rErr;
+
+      const roleMap = new Map<string, string>();
+      roles?.forEach((r: any) => roleMap.set(r.user_id, r.role));
+
+      return profiles?.map((p: any) => ({
+        ...p,
+        user_roles: [{ role: roleMap.get(p.user_id) || "student" }],
+      })) || [];
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useUpdateUserRole() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
+      // Upsert the role
+      const { data: existing } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", userId)
+        .single();
+
+      if (existing) {
+        const { error } = await supabase
+          .from("user_roles")
+          .update({ role: role as any })
+          .eq("user_id", userId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("user_roles")
+          .insert({ user_id: userId, role: role as any });
+        if (error) throw error;
+      }
+
+      supabase.functions.invoke("notify", {
+        body: {
+          action: "role_changed",
+          data: { user_id: userId, new_role: role, actor_id: user!.id },
+        },
+      }).catch(() => {});
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["all-users"] });
     },
   });
 }
@@ -636,6 +733,7 @@ export function useDepartments() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 30,
   });
 }
 
@@ -647,6 +745,7 @@ export function useResearchCategories() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 30,
   });
 }
 
@@ -657,34 +756,49 @@ export function useDashboardStats(role: string) {
     queryKey: ["dashboard-stats", role, user?.id],
     queryFn: async () => {
       if (role === "student") {
-        const { count: totalResearch } = await supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id);
-        const { count: pendingReview } = await supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).in("status", ["pending", "review"]);
-        const { count: approved } = await supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).eq("status", "approved");
-        const { count: unreadNotifs } = await supabase.from("notifications").select("*", { count: "exact", head: true }).eq("user_id", user!.id).eq("is_read", false);
-        return { totalResearch: totalResearch || 0, pendingReview: pendingReview || 0, approved: approved || 0, unreadNotifs: unreadNotifs || 0 };
+        const [totalRes, pendingRes, approvedRes, unreadRes] = await Promise.all([
+          supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id),
+          supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).in("status", ["pending", "review"]),
+          supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).eq("status", "approved"),
+          supabase.from("notifications").select("*", { count: "exact", head: true }).eq("user_id", user!.id).eq("is_read", false),
+        ]);
+        return {
+          totalResearch: totalRes.count || 0,
+          pendingReview: pendingRes.count || 0,
+          approved: approvedRes.count || 0,
+          unreadNotifs: unreadRes.count || 0,
+        };
       }
       if (role === "adviser") {
         const { data: assignments } = await supabase.from("adviser_assignments").select("research_id").eq("adviser_id", user!.id);
         const ids = assignments?.map((a: any) => a.research_id) || [];
-        const { count: pendingReviews } = ids.length ? await supabase.from("research").select("*", { count: "exact", head: true }).in("id", ids).in("status", ["pending", "review"]) : { count: 0 };
-        const { count: approvedCount } = ids.length ? await supabase.from("research").select("*", { count: "exact", head: true }).in("id", ids).eq("status", "approved") : { count: 0 };
-        return { assignedStudents: ids.length, pendingReviews: pendingReviews || 0, approved: approvedCount || 0 };
+        if (ids.length === 0) return { assignedStudents: 0, pendingReviews: 0, approved: 0 };
+        const [pendingRes, approvedRes] = await Promise.all([
+          supabase.from("research").select("*", { count: "exact", head: true }).in("id", ids).in("status", ["pending", "review"]),
+          supabase.from("research").select("*", { count: "exact", head: true }).in("id", ids).eq("status", "approved"),
+        ]);
+        return { assignedStudents: ids.length, pendingReviews: pendingRes.count || 0, approved: approvedRes.count || 0 };
       }
       if (role === "staff") {
-        const { count: pendingPayments } = await supabase.from("payments").select("*", { count: "exact", head: true }).in("status", ["pending", "submitted"]);
-        const { count: unassigned } = await supabase.from("research").select("*", { count: "exact", head: true });
-        const { count: defenseCount } = await supabase.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled");
-        return { pendingPayments: pendingPayments || 0, totalResearch: unassigned || 0, defenseCount: defenseCount || 0 };
+        const [pendingPay, totalRes, defRes] = await Promise.all([
+          supabase.from("payments").select("*", { count: "exact", head: true }).in("status", ["pending", "submitted"]),
+          supabase.from("research").select("*", { count: "exact", head: true }),
+          supabase.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled"),
+        ]);
+        return { pendingPayments: pendingPay.count || 0, totalResearch: totalRes.count || 0, defenseCount: defRes.count || 0 };
       }
       if (role === "admin") {
-        const { count: totalUsers } = await supabase.from("profiles").select("*", { count: "exact", head: true });
-        const { count: totalResearch } = await supabase.from("research").select("*", { count: "exact", head: true });
-        const { count: activeDefense } = await supabase.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled");
-        return { totalUsers: totalUsers || 0, totalResearch: totalResearch || 0, activeDefense: activeDefense || 0 };
+        const [usersRes, researchRes, defenseRes] = await Promise.all([
+          supabase.from("profiles").select("*", { count: "exact", head: true }),
+          supabase.from("research").select("*", { count: "exact", head: true }),
+          supabase.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled"),
+        ]);
+        return { totalUsers: usersRes.count || 0, totalResearch: researchRes.count || 0, activeDefense: defenseRes.count || 0 };
       }
       return {};
     },
     enabled: !!user,
+    staleTime: 1000 * 60,
   });
 }
 
@@ -695,12 +809,13 @@ export function useArchivedResearch() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("research")
-        .select("*, profiles:submitted_by(full_name), research_members(member_name)")
+        .select("*, profiles!submitted_by(full_name), research_members(member_name), departments(name, code)")
         .in("status", ["completed", "archived"])
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -716,5 +831,6 @@ export function useResearchChartData() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 5,
   });
 }
