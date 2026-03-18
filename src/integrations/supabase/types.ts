@@ -62,6 +62,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "adviser_assignments_adviser_id_profiles_fkey"
+            columns: ["adviser_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "adviser_assignments_assigned_by_profiles_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "adviser_assignments_research_id_fkey"
             columns: ["research_id"]
             isOneToOne: false
@@ -98,7 +112,15 @@ export type Database = {
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "announcements_created_by_profiles_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       audit_logs: {
         Row: {
@@ -131,7 +153,15 @@ export type Database = {
           ip_address?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       defense_panel_members: {
         Row: {
@@ -159,6 +189,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "defense_schedules"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "defense_panel_members_panelist_id_profiles_fkey"
+            columns: ["panelist_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -200,6 +237,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "defense_schedules_created_by_profiles_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
           {
             foreignKeyName: "defense_schedules_research_id_fkey"
             columns: ["research_id"]
@@ -281,6 +325,20 @@ export type Database = {
             referencedRelation: "research"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "manuscripts_reviewed_by_profiles_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "manuscripts_uploaded_by_profiles_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       notifications: {
@@ -317,7 +375,15 @@ export type Database = {
           type?: Database["public"]["Enums"]["notification_type"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       payments: {
         Row: {
@@ -372,6 +438,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "research"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_submitted_by_profiles_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "payments_verified_by_profiles_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -437,6 +517,13 @@ export type Database = {
           research_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "remarks_author_id_profiles_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
           {
             foreignKeyName: "remarks_manuscript_id_fkey"
             columns: ["manuscript_id"]
@@ -514,6 +601,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "departments"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "research_submitted_by_profiles_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
