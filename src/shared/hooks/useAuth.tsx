@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import type { User as SupaUser, Session } from "@supabase/supabase-js";
 
 export type UserRole = "student" | "adviser" | "staff" | "admin";
 
-interface User {
+export interface AppUser {
   id: string;
   name: string;
   email: string;
@@ -11,53 +13,106 @@ interface User {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: AppUser | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string, role: UserRole) => void;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<{ error?: string }>;
+  signup: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error?: string }>;
+  logout: () => Promise<void>;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isAuthenticated: false,
-  login: () => {},
-  logout: () => {},
-  isLoading: false,
+  login: async () => ({}),
+  signup: async () => ({}),
+  logout: async () => {},
+  isLoading: true,
 });
 
-// Demo users for each role
-const DEMO_USERS: Record<UserRole, User> = {
-  student: { id: "s1", name: "Juan Dela Cruz", email: "juan@bestlink.edu.ph", role: "student" },
-  adviser: { id: "a1", name: "Dr. Maria Santos", email: "msantos@bestlink.edu.ph", role: "adviser" },
-  staff: { id: "st1", name: "Ana Reyes", email: "areyes@bestlink.edu.ph", role: "staff" },
-  admin: { id: "ad1", name: "Admin User", email: "admin@bestlink.edu.ph", role: "admin" },
-};
+async function fetchAppUser(supaUser: SupaUser): Promise<AppUser | null> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, avatar_url")
+    .eq("user_id", supaUser.id)
+    .single();
+
+  const { data: roleData } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", supaUser.id)
+    .single();
+
+  return {
+    id: supaUser.id,
+    name: profile?.full_name || supaUser.email?.split("@")[0] || "User",
+    email: supaUser.email || "",
+    role: (roleData?.role as UserRole) || "student",
+    avatar: profile?.avatar_url || undefined,
+  };
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem("crad-user");
-    return stored ? JSON.parse(stored) : null;
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback((email: string, _password: string, role: UserRole) => {
-    setIsLoading(true);
-    setTimeout(() => {
-      const u = { ...DEMO_USERS[role], email };
-      setUser(u);
-      localStorage.setItem("crad-user", JSON.stringify(u));
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        // Use setTimeout to avoid deadlock with Supabase auth
+        setTimeout(async () => {
+          const appUser = await fetchAppUser(session.user);
+          setUser(appUser);
+          setIsLoading(false);
+        }, 0);
+      } else {
+        setUser(null);
+        setIsLoading(false);
+      }
+    });
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const appUser = await fetchAppUser(session.user);
+        setUser(appUser);
+      }
       setIsLoading(false);
-    }, 800);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const logout = useCallback(() => {
+  const login = useCallback(async (email: string, password: string) => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setIsLoading(false);
+      return { error: error.message };
+    }
+    return {};
+  }, []);
+
+  const signup = useCallback(async (email: string, password: string, fullName: string, role: UserRole) => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName, role } },
+    });
+    if (error) {
+      setIsLoading(false);
+      return { error: error.message };
+    }
+    return {};
+  }, []);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("crad-user");
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, signup, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

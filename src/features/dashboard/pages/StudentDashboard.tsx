@@ -1,46 +1,28 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useAuth } from "@/shared/hooks/useAuth";
-import { useSnackbar } from "@/shared/components/SnackbarProvider";
+import { useDashboardStats, useMyResearch, useNotifications } from "@/shared/hooks/useSupabaseData";
 import { StatSkeleton, CardSkeleton } from "@/shared/components/Skeletons";
 import { StatusBadge } from "@/shared/components/StatusBadge";
-import {
-  FileText, Upload, CreditCard, Calendar, Bell, TrendingUp,
-  Clock, CheckCircle2, AlertCircle, BookOpen, ArrowRight
-} from "lucide-react";
+import { FileText, Upload, CreditCard, Calendar, Bell, Clock, CheckCircle2, BookOpen, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
-// Mock data
-const mockResearch = [
-  { id: "R-2024-001", title: "IoT-Based Smart Classroom Monitoring System", status: "review" as const, date: "Mar 15, 2026" },
-  { id: "R-2024-002", title: "AI-Powered Student Performance Predictor", status: "pending" as const, date: "Mar 10, 2026" },
-  { id: "R-2024-003", title: "Blockchain-Based Credential Verification", status: "approved" as const, date: "Feb 28, 2026" },
-];
-
-const mockNotifications = [
-  { id: "1", message: "Your manuscript has been reviewed", time: "2h ago", read: false },
-  { id: "2", message: "Defense schedule posted for March 25", time: "5h ago", read: false },
-  { id: "3", message: "Payment verified for R-2024-001", time: "1d ago", read: true },
-];
+const COLORS = ["hsl(225, 73%, 30%)", "hsl(200, 80%, 55%)", "hsl(142, 71%, 35%)", "hsl(38, 92%, 50%)", "hsl(355, 80%, 45%)"];
 
 export const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { show } = useSnackbar();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const { data: stats, isLoading: statsLoading } = useDashboardStats("student");
+  const { data: research, isLoading: researchLoading } = useMyResearch();
+  const { data: notifications } = useNotifications();
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-      show("Welcome back, " + (user?.name || "Student") + "!", "info");
-    }, 1200);
-    return () => clearTimeout(timer);
-  }, []);
+  const loading = statsLoading || researchLoading;
 
-  const stats = [
-    { label: "Total Research", value: "3", icon: <FileText size={18} />, change: "+1 this month", color: "text-primary" },
-    { label: "Pending Review", value: "1", icon: <Clock size={18} />, change: "Awaiting adviser", color: "text-warning" },
-    { label: "Approved", value: "1", icon: <CheckCircle2 size={18} />, change: "Ready for defense", color: "text-success" },
-    { label: "Upcoming Defense", value: "1", icon: <Calendar size={18} />, change: "Mar 25, 2026", color: "text-secondary" },
+  const statCards = [
+    { label: "Total Research", value: stats?.totalResearch ?? 0, icon: <FileText size={18} />, color: "text-primary" },
+    { label: "Pending Review", value: stats?.pendingReview ?? 0, icon: <Clock size={18} />, color: "text-warning" },
+    { label: "Approved", value: stats?.approved ?? 0, icon: <CheckCircle2 size={18} />, color: "text-success" },
+    { label: "Unread Notifications", value: stats?.unreadNotifs ?? 0, icon: <Bell size={18} />, color: "text-secondary" },
   ];
 
   const quickActions = [
@@ -50,14 +32,16 @@ export const StudentDashboard: React.FC = () => {
     { label: "View Schedule", icon: <Calendar size={16} />, path: "/defense" },
   ];
 
+  // Pie chart data from research statuses
+  const statusCounts: Record<string, number> = {};
+  research?.forEach((r: any) => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });
+  const pieData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="space-y-1">
-          <div className="h-7 w-48 skeleton-shimmer rounded" />
-          <div className="h-4 w-72 skeleton-shimmer rounded" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="h-7 w-48 skeleton-shimmer rounded" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -67,9 +51,10 @@ export const StudentDashboard: React.FC = () => {
     );
   }
 
+  const unreadNotifs = notifications?.filter((n: any) => !n.is_read).slice(0, 5) || [];
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div>
         <h1 className="text-xl lg:text-2xl font-bold text-foreground tracking-tight">
           Good day, {user?.name?.split(" ")[0]}! 👋
@@ -77,87 +62,109 @@ export const StudentDashboard: React.FC = () => {
         <p className="text-sm text-muted-foreground mt-0.5">Here's your research progress overview</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-card border border-border rounded-xl p-4 hover:shadow-md transition-shadow animate-slide-up">
+        {statCards.map((s) => (
+          <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:shadow-md transition-shadow animate-slide-up">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-muted-foreground">{stat.label}</span>
-              <span className={stat.color}>{stat.icon}</span>
+              <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
+              <span className={s.color}>{s.icon}</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{stat.change}</p>
+            <p className="text-2xl font-bold text-foreground">{s.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Quick actions */}
       <div>
         <h2 className="text-sm font-semibold text-foreground mb-3">Quick Actions</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-          {quickActions.map((action) => (
-            <button
-              key={action.label}
-              onClick={() => navigate(action.path)}
-              className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:bg-muted/30 hover:border-primary/20 transition-all min-h-[44px] group"
-            >
-              <span className="text-muted-foreground group-hover:text-primary transition-colors">{action.icon}</span>
-              <span className="text-sm font-medium text-foreground">{action.label}</span>
+          {quickActions.map((a) => (
+            <button key={a.label} onClick={() => navigate(a.path)}
+              className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:bg-muted/30 hover:border-primary/20 transition-all min-h-[44px] group">
+              <span className="text-muted-foreground group-hover:text-primary transition-colors">{a.icon}</span>
+              <span className="text-sm font-medium text-foreground">{a.label}</span>
             </button>
           ))}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Research list */}
         <div className="lg:col-span-2 bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <BookOpen size={16} className="text-primary" />
-              My Research
+              <BookOpen size={16} className="text-primary" /> My Research
             </h2>
             <button onClick={() => navigate("/research/my")} className="text-xs text-primary hover:underline flex items-center gap-1">
               View All <ArrowRight size={12} />
             </button>
           </div>
-          <div className="divide-y divide-border">
-            {mockResearch.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer min-h-[44px]">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{r.title}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{r.id}</p>
+          {!research?.length ? (
+            <div className="p-8 text-center">
+              <FileText size={32} className="mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">No research yet. Submit your first research!</p>
+              <button onClick={() => navigate("/research/submit")} className="mt-3 text-xs text-primary font-semibold hover:underline">Submit Research →</button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {research.slice(0, 5).map((r: any) => (
+                <div key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer min-h-[44px]">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{r.title}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{r.research_code}</p>
+                  </div>
+                  <StatusBadge variant={r.status}>{r.status}</StatusBadge>
                 </div>
-                <StatusBadge variant={r.status}>{r.status}</StatusBadge>
-                <span className="text-xs text-muted-foreground hidden sm:block">{r.date}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Notifications */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Bell size={16} className="text-primary" />
-              Notifications
+              <Bell size={16} className="text-primary" /> Notifications
             </h2>
-            <span className="text-[10px] bg-accent text-accent-foreground px-2 py-0.5 rounded-full font-bold">2 new</span>
+            {unreadNotifs.length > 0 && (
+              <span className="text-[10px] bg-accent text-accent-foreground px-2 py-0.5 rounded-full font-bold">{unreadNotifs.length} new</span>
+            )}
           </div>
-          <div className="divide-y divide-border">
-            {mockNotifications.map((n) => (
-              <div key={n.id} className={`px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer min-h-[44px] ${!n.read ? "bg-primary/[0.02]" : ""}`}>
-                <div className="flex items-start gap-2">
-                  {!n.read && <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground">{n.message}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{n.time}</p>
+          {unreadNotifs.length === 0 ? (
+            <div className="p-8 text-center">
+              <Bell size={24} className="mx-auto text-muted-foreground mb-2" />
+              <p className="text-xs text-muted-foreground">No new notifications</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {unreadNotifs.map((n: any) => (
+                <div key={n.id} className="px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer min-h-[44px] bg-primary/[0.02]">
+                  <div className="flex items-start gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">{n.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {pieData.length > 0 && (
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-foreground mb-4">Research Status Distribution</h2>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name}: ${value}`}>
+                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
