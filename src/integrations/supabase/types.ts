@@ -881,6 +881,139 @@ export type Database = {
       [_ in never]: never
     }
   }
+  crad: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      cashier_integration_events: {
+        Row: {
+          amount_due: number
+          created_at: string
+          currency_code: string
+          event_key: string
+          id: number
+          last_error: string | null
+          patient_name: string | null
+          patient_type: string
+          payload: Json
+          payment_status: string
+          reference_no: string | null
+          source_entity: string
+          source_key: string
+          source_module: string
+          sync_status: string
+          synced_at: string | null
+          updated_at: string
+        }
+        Relationships: []
+      }
+      cashier_payment_links: {
+        Row: {
+          amount_due: number
+          amount_paid: number
+          balance_due: number
+          cashier_billing_id: number | null
+          cashier_can_proceed: number
+          cashier_reference: string | null
+          cashier_verified_at: string | null
+          created_at: string
+          id: number
+          invoice_number: string | null
+          latest_payment_method: string | null
+          metadata: Json
+          official_receipt: string | null
+          paid_at: string | null
+          payment_status: string
+          source_key: string
+          source_module: string
+          updated_at: string
+        }
+        Relationships: []
+      }
+      clinic_cashier_audit_logs: {
+        Row: {
+          action_name: string
+          actor_name: string
+          created_at: string
+          id: number
+          payload_json: Json
+          remarks: string | null
+          source_id: string
+          source_module: string
+          status_after: string
+        }
+        Relationships: []
+      }
+      clinic_cashier_sync_logs: {
+        Row: {
+          cashier_billing_id: number | null
+          created_at: string
+          error_message: string | null
+          extra_payload: Json | null
+          id: number
+          patient_id: string
+          request_payload: Json
+          response_payload: Json | null
+          retry_count: number
+          source_id: string
+          source_module: string
+          source_type: string
+          student_id: string
+          sync_status: string
+          updated_at: string
+        }
+        Relationships: []
+      }
+      department_clearance_records: {
+        Row: {
+          approver_name: string | null
+          approver_role: string | null
+          clearance_reference: string
+          created_at: string
+          decided_at: string | null
+          department_key: string
+          department_name: string
+          external_reference: string | null
+          id: number
+          metadata: Json
+          patient_code: string | null
+          patient_id: string | null
+          patient_name: string
+          patient_type: string
+          remarks: string | null
+          requested_by: string | null
+          stage_order: number
+          status: string
+          updated_at: string
+        }
+        Relationships: []
+      }
+      department_flow_profiles: {
+        Row: {
+          clearance_stage_order: number
+          created_at: string
+          department_key: string
+          department_name: string
+          flow_order: number
+          notes: string | null
+          receives: Json
+          sends: Json
+          updated_at: string
+        }
+        Relationships: []
+      }
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">

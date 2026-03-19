@@ -28,6 +28,7 @@ import { AuditLogsPage } from "@/features/admin/pages/AuditLogsPage";
 import { FinalApprovalsPage } from "@/features/admin/pages/FinalApprovalsPage";
 import { PanelApprovalsPage } from "@/features/defense/pages/PanelApprovalsPage";
 import { ProfilePage } from "@/features/profile/pages/ProfilePage";
+import { RegistrarIntegrationPage } from "@/features/integrations/pages/RegistrarIntegrationPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -61,6 +62,7 @@ const ProtectedRoutes = () => {
         <Route path="/admin/settings" element={<SystemSettingsPage />} />
         <Route path="/admin/logs" element={<AuditLogsPage />} />
         <Route path="/admin/final-approvals" element={<FinalApprovalsPage />} />
+        <Route path="/integrations/registrar" element={<RegistrarIntegrationPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

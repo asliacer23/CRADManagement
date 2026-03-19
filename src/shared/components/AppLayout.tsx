@@ -7,7 +7,7 @@ import { CommandPalette } from "@/shared/components/CommandPalette";
 import {
   LayoutDashboard, FileText, Upload, CreditCard, Bell, Calendar, ClipboardCheck,
   MessageSquare, Users, Settings, LogOut, Menu, X, ChevronLeft, Search,
-  BookOpen, Archive, Megaphone, UserCheck, ShieldCheck, User, CheckCircle2
+  BookOpen, Archive, Megaphone, UserCheck, ShieldCheck, User, CheckCircle2, GitBranch
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -37,6 +37,7 @@ const navItems: NavItem[] = [
   { label: "Final Approvals", path: "/admin/final-approvals", icon: <CheckCircle2 size={18} />, roles: ["staff", "admin"] },
   { label: "Archive", path: "/archive", icon: <Archive size={18} />, roles: ["staff", "admin"] },
   { label: "Announcements", path: "/announcements", icon: <Megaphone size={18} />, roles: ["staff", "admin"] },
+  { label: "Registrar Integration", path: "/integrations/registrar", icon: <GitBranch size={18} />, roles: ["staff", "admin"] },
   { label: "Manage Users", path: "/admin/users", icon: <Users size={18} />, roles: ["admin"] },
   { label: "All Research", path: "/admin/research", icon: <BookOpen size={18} />, roles: ["admin"] },
   { label: "System Settings", path: "/admin/settings", icon: <Settings size={18} />, roles: ["admin"] },
