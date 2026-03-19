@@ -375,7 +375,7 @@ export function useDefenseSchedules() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("defense_schedules")
-        .select("*, research(title, research_code, submitted_by), defense_panel_members(panelist_id, role, profiles!panelist_id(full_name))")
+        .select("*, research(id, title, research_code, submitted_by), defense_panel_members(panelist_id, role, profiles!panelist_id(full_name))")
         .order("defense_date", { ascending: true });
       if (error) throw error;
       return data;
@@ -416,6 +416,48 @@ export function useCreateDefense() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["defense-schedules"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    },
+  });
+}
+
+export function useUpdateDefenseStatus() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ defenseId, status }: { defenseId: string; status: "scheduled" | "completed" | "cancelled" }) => {
+      const { error } = await supabase
+        .from("defense_schedules")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("id", defenseId);
+      if (error) throw error;
+
+      // Send notification when marked as completed
+      if (status === "completed") {
+        const { data: defense } = await supabase
+          .from("defense_schedules")
+          .select("*, research(id, title, submitted_by)")
+          .eq("id", defenseId)
+          .single();
+
+        if (defense?.research) {
+          supabase.functions.invoke("notify", {
+            body: {
+              action: "defense_completed",
+              data: {
+                user_id: defense.research.submitted_by,
+                defense_id: defenseId,
+                title: defense.research.title,
+                actor_id: user!.id,
+              },
+            },
+          }).catch(() => {});
+        }
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["defense-schedules"] });
+      qc.invalidateQueries({ queryKey: ["pending-final-approvals"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
   });
@@ -1087,6 +1129,220 @@ export function useUploadAvatar() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["user-profile"] });
+    },
+  });
+}
+
+// ==================== DEFENSE GRADES ====================
+export function useDefenseGrades(researchId?: string, defenseId?: string) {
+  return useQuery({
+    queryKey: ["defense-grades", researchId, defenseId],
+    queryFn: async () => {
+      let query = supabase
+        .from("defense_grades")
+        .select("*, profiles!panelist_id(full_name)");
+      
+      if (researchId) query = query.eq("research_id", researchId);
+      if (defenseId) query = query.eq("defense_id", defenseId);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!researchId || !!defenseId,
+    staleTime: 1000 * 10,  // Consider stale after 10 seconds
+    refetchInterval: 1000 * 5,  // Refetch every 5 seconds automatically
+    refetchOnWindowFocus: true,  // Refetch when user focuses back on window
+  });
+}
+
+export function useSubmitDefenseGrade() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ defenseId, researchId, grade, remarks }: {
+      defenseId: string; researchId: string; grade: number; remarks?: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("defense_grades")
+        .insert({
+          defense_id: defenseId,
+          research_id: researchId,
+          panelist_id: user!.id,
+          grade,
+          remarks: remarks || null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["defense-grades"] });
+      qc.invalidateQueries({ queryKey: ["defense-schedules"] });
+    },
+  });
+}
+
+export function useUpdateDefenseGrade() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ gradeId, grade, remarks }: {
+      gradeId: string; grade: number; remarks?: string;
+    }) => {
+      const { error } = await supabase
+        .from("defense_grades")
+        .update({
+          grade,
+          remarks: remarks || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", gradeId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["defense-grades"] });
+    },
+  });
+}
+
+// ==================== FINAL APPROVALS ====================
+export function usePendingFinalApprovals() {
+  return useQuery({
+    queryKey: ["pending-final-approvals"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("final_approvals")
+        .select("*, research(id, title, research_code, submitted_by, defense_schedules(id, status, defense_date, updated_at), research_members(member_name, is_leader), profiles!submitted_by(full_name))")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+
+      const approvals = data || [];
+      const researchIds = approvals.map((a: any) => a.research_id).filter(Boolean);
+      if (researchIds.length === 0) return approvals;
+
+      const { data: grades, error: gradesError } = await supabase
+        .from("defense_grades")
+        .select("*, profiles!panelist_id(full_name)")
+        .in("research_id", researchIds);
+      if (gradesError) throw gradesError;
+
+      const gradesByResearchId = new Map<string, any[]>();
+      (grades || []).forEach((g: any) => {
+        const list = gradesByResearchId.get(g.research_id) || [];
+        list.push(g);
+        gradesByResearchId.set(g.research_id, list);
+      });
+
+      return approvals.map((approval: any) => ({
+        ...approval,
+        defense_grades: gradesByResearchId.get(approval.research_id) || [],
+      }));
+    },
+    staleTime: 1000 * 30,  // Refetch every 30 seconds
+    refetchOnWindowFocus: true,  // Refetch when user focuses back on window
+  });
+}
+
+export function useFinalApprovalsWithGrades() {
+  return useQuery({
+    queryKey: ["final-approvals-with-grades"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("final_approvals")
+        .select("*, research(id, title, research_code, submitted_by, defense_schedules!inner(id), research_members(member_name, is_leader), profiles!submitted_by(full_name))")
+        .neq("status", "pending")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+
+      // Fetch defense grades for each
+      const enriched = await Promise.all(
+        (data || []).map(async (approval: any) => {
+          const { data: grades, error: gradesError } = await supabase
+            .from("defense_grades")
+            .select("*, profiles!panelist_id(full_name)")
+            .eq("research_id", approval.research_id);
+          if (gradesError) {
+            console.error("Error fetching grades:", gradesError);
+            return { ...approval, defense_grades: [] };
+          }
+          return { ...approval, defense_grades: grades || [] };
+        })
+      );
+
+      return enriched;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useResearchFinalApproval(researchId?: string) {
+  return useQuery({
+    queryKey: ["research-final-approval", researchId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("final_approvals")
+        .select("*, approved_by_profile:profiles!approved_by(full_name)")
+        .eq("research_id", researchId!)
+        .single();
+      if (error && error.code !== "PGRST116") throw error; // PGRST116 = no rows
+      return data;
+    },
+    enabled: !!researchId,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useUpdateFinalApproval() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ researchId, status, remarks }: {
+      researchId: string; status: "approved" | "rejected" | "revision_requested"; remarks?: string;
+    }) => {
+      const { error } = await supabase
+        .from("final_approvals")
+        .update({
+          status,
+          remarks: remarks || null,
+          approved_by: user!.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("research_id", researchId);
+      if (error) throw error;
+
+      // Fetch submitter info for notification
+      const { data: research } = await supabase
+        .from("research")
+        .select("submitted_by, title")
+        .eq("id", researchId)
+        .single();
+
+      // Send notification
+      supabase.functions.invoke("notify", {
+        body: {
+          action: "research_final_approval_completed",
+          data: {
+            user_id: research?.submitted_by,
+            research_id: researchId,
+            status,
+            title: research?.title,
+            actor_id: user!.id,
+          },
+        },
+      }).catch(() => {});
+
+      return true;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pending-final-approvals"] });
+      qc.invalidateQueries({ queryKey: ["final-approvals-with-grades"] });
+      qc.invalidateQueries({ queryKey: ["research-final-approval"] });
+      qc.invalidateQueries({ queryKey: ["all-research"] });
+      qc.invalidateQueries({ queryKey: ["archived-research"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
   });
 }

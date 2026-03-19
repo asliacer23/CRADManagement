@@ -172,6 +172,40 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "research_final_approval_completed": {
+        const statusMessages: Record<string, string> = {
+          approved: "Your research has been approved and archived!",
+          rejected: "Your research has been rejected.",
+          revision_requested: "Staff has requested revisions to your research.",
+        };
+        const statusTitles: Record<string, string> = {
+          approved: "Research Approved",
+          rejected: "Research Rejected",
+          revision_requested: "Revision Requested",
+        };
+        await supabase.from("notifications").insert({
+          user_id: data.user_id,
+          type: "research",
+          title: statusTitles[data.status] || "Research Status Updated",
+          message: statusMessages[data.status] || `Your research "${data.title}" status has been updated to ${data.status}.`,
+          reference_id: data.research_id,
+          reference_type: "research",
+        });
+        break;
+      }
+
+      case "defense_completed": {
+        await supabase.from("notifications").insert({
+          user_id: data.user_id,
+          type: "defense",
+          title: "Defense Completed",
+          message: `Defense for "${data.title}" has been completed. Panelists can now submit grades, and you'll receive updates on the final approval status.`,
+          reference_id: data.defense_id,
+          reference_type: "defense",
+        });
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
           status: 400,

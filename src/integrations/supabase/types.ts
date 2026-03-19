@@ -253,6 +253,61 @@ export type Database = {
           },
         ]
       }
+      defense_grades: {
+        Row: {
+          created_at: string
+          defense_id: string
+          grade: number
+          id: string
+          panelist_id: string
+          remarks: string | null
+          research_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          defense_id: string
+          grade: number
+          id?: string
+          panelist_id: string
+          remarks?: string | null
+          research_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          defense_id?: string
+          grade?: number
+          id?: string
+          panelist_id?: string
+          remarks?: string | null
+          research_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "defense_grades_defense_id_fkey"
+            columns: ["defense_id"]
+            isOneToOne: false
+            referencedRelation: "defense_schedules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "defense_grades_panelist_id_profiles_fkey"
+            columns: ["panelist_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "defense_grades_research_id_fkey"
+            columns: ["research_id"]
+            isOneToOne: false
+            referencedRelation: "research"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       departments: {
         Row: {
           code: string
@@ -273,6 +328,54 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      final_approvals: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          id: string
+          remarks: string | null
+          research_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          remarks?: string | null
+          research_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          remarks?: string | null
+          research_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "final_approvals_approved_by_profiles_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "final_approvals_research_id_fkey"
+            columns: ["research_id"]
+            isOneToOne: false
+            referencedRelation: "research"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       manuscripts: {
         Row: {

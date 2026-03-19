@@ -25,6 +25,8 @@ import { ManageUsersPage } from "@/features/admin/pages/ManageUsersPage";
 import { AllResearchPage } from "@/features/admin/pages/AllResearchPage";
 import { SystemSettingsPage } from "@/features/admin/pages/SystemSettingsPage";
 import { AuditLogsPage } from "@/features/admin/pages/AuditLogsPage";
+import { FinalApprovalsPage } from "@/features/admin/pages/FinalApprovalsPage";
+import { PanelApprovalsPage } from "@/features/defense/pages/PanelApprovalsPage";
 import { ProfilePage } from "@/features/profile/pages/ProfilePage";
 import NotFound from "./pages/NotFound";
 
@@ -48,6 +50,7 @@ const ProtectedRoutes = () => {
         <Route path="/payments/verify" element={<VerifyPaymentsPage />} />
         <Route path="/defense" element={<DefenseSchedulePage />} />
         <Route path="/defense/manage" element={<ManageDefensePage />} />
+        <Route path="/defense/panel-approvals" element={<PanelApprovalsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/remarks" element={<RemarksPage />} />
         <Route path="/advisers/assign" element={<AssignAdviserPage />} />
@@ -57,6 +60,7 @@ const ProtectedRoutes = () => {
         <Route path="/admin/research" element={<AllResearchPage />} />
         <Route path="/admin/settings" element={<SystemSettingsPage />} />
         <Route path="/admin/logs" element={<AuditLogsPage />} />
+        <Route path="/admin/final-approvals" element={<FinalApprovalsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

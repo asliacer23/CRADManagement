@@ -7,7 +7,7 @@ import { CommandPalette } from "@/shared/components/CommandPalette";
 import {
   LayoutDashboard, FileText, Upload, CreditCard, Bell, Calendar, ClipboardCheck,
   MessageSquare, Users, Settings, LogOut, Menu, X, ChevronLeft, Search,
-  BookOpen, Archive, Megaphone, UserCheck, ShieldCheck, User
+  BookOpen, Archive, Megaphone, UserCheck, ShieldCheck, User, CheckCircle2
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -29,10 +29,12 @@ const navItems: NavItem[] = [
   { label: "Defense Schedule", path: "/defense", icon: <Calendar size={18} />, roles: ["student", "adviser", "staff", "admin"] },
   { label: "Review Manuscripts", path: "/manuscripts/review", icon: <ClipboardCheck size={18} />, roles: ["adviser"] },
   { label: "Approve Research", path: "/research/approve", icon: <UserCheck size={18} />, roles: ["adviser"] },
+  { label: "Panel Approvals", path: "/defense/panel-approvals", icon: <CheckCircle2 size={18} />, roles: ["adviser", "staff", "admin"] },
   { label: "Remarks", path: "/remarks", icon: <MessageSquare size={18} />, roles: ["adviser"] },
   { label: "Verify Payments", path: "/payments/verify", icon: <CreditCard size={18} />, roles: ["staff"] },
   { label: "Assign Adviser", path: "/advisers/assign", icon: <Users size={18} />, roles: ["staff"] },
   { label: "Set Defense", path: "/defense/manage", icon: <Calendar size={18} />, roles: ["staff"] },
+  { label: "Final Approvals", path: "/admin/final-approvals", icon: <CheckCircle2 size={18} />, roles: ["staff", "admin"] },
   { label: "Archive", path: "/archive", icon: <Archive size={18} />, roles: ["staff", "admin"] },
   { label: "Announcements", path: "/announcements", icon: <Megaphone size={18} />, roles: ["staff", "admin"] },
   { label: "Manage Users", path: "/admin/users", icon: <Users size={18} />, roles: ["admin"] },
