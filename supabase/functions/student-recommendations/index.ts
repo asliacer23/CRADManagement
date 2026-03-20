@@ -14,10 +14,11 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+  const crad = supabase.schema("crad");
 
   try {
     if (req.method === "GET") {
-      const { data, error } = await supabase
+      const { data, error } = await crad
         .from("audit_logs")
         .select("id, action, details, entity_id, entity_type, created_at")
         .eq("entity_type", "student_recommendation")
@@ -53,7 +54,7 @@ Deno.serve(async (req) => {
 
     const serialized = JSON.stringify(recommendation);
 
-    const { data: staffRoles } = await supabase
+    const { data: staffRoles } = await crad
       .from("user_roles")
       .select("user_id")
       .in("role", ["staff", "admin"]);
@@ -68,10 +69,10 @@ Deno.serve(async (req) => {
         reference_type: "student_recommendation",
       }));
 
-      await supabase.from("notifications").insert(notifications);
+      await crad.from("notifications").insert(notifications);
     }
 
-    const { error: auditError } = await supabase.from("audit_logs").insert({
+    const { error: auditError } = await crad.from("audit_logs").insert({
       action: "STUDENT_RECOMMENDATION_RECEIVED",
       details: serialized,
       entity_id: recommendation.student_id || recommendation.reference_no || null,

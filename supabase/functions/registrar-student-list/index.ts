@@ -14,10 +14,11 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+  const crad = supabase.schema("crad");
 
   try {
     if (req.method === "GET") {
-      const { data, error } = await supabase
+      const { data, error } = await crad
         .from("audit_logs")
         .select("id, action, details, entity_id, entity_type, created_at")
         .eq("entity_type", "registrar_student_list")
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
       student_count: students.length,
     };
 
-    const { error: auditError } = await supabase.from("audit_logs").insert({
+    const { error: auditError } = await crad.from("audit_logs").insert({
       action: "REGISTRAR_STUDENT_LIST_RECEIVED",
       details: JSON.stringify({ summary, students: students.slice(0, 20) }),
       entity_id: students[0]?.student_no ?? null,

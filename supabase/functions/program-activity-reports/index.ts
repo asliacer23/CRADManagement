@@ -14,15 +14,16 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+  const crad = supabase.schema("crad");
 
   try {
     const [researchCount, manuscriptCount, paymentCount, defenseCount, announcementCount, latestResearch] = await Promise.all([
-      supabase.from("research").select("*", { count: "exact", head: true }),
-      supabase.from("manuscripts").select("*", { count: "exact", head: true }),
-      supabase.from("payments").select("*", { count: "exact", head: true }),
-      supabase.from("defense_schedules").select("*", { count: "exact", head: true }),
-      supabase.from("announcements").select("*", { count: "exact", head: true }),
-      supabase
+      crad.from("research").select("*", { count: "exact", head: true }),
+      crad.from("manuscripts").select("*", { count: "exact", head: true }),
+      crad.from("payments").select("*", { count: "exact", head: true }),
+      crad.from("defense_schedules").select("*", { count: "exact", head: true }),
+      crad.from("announcements").select("*", { count: "exact", head: true }),
+      crad
         .from("research")
         .select("id, title, research_code, status, created_at")
         .order("created_at", { ascending: false })

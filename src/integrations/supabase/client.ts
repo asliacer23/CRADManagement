@@ -2,13 +2,21 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_URL = import.meta.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const FALLBACK_SUPABASE_URL = "https://invalid-project.supabase.co";
+const FALLBACK_SUPABASE_KEY = "invalid-publishable-key";
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  console.error(
+    "Supabase configuration is incomplete. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to your .env file."
+  );
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+export const supabase = createClient<Database>(SUPABASE_URL || FALLBACK_SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,

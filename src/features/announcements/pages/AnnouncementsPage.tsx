@@ -1,9 +1,11 @@
-import React, { useState } from "react";
-import { Megaphone, Plus, Pin } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Eye, Pin, Plus } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { useSnackbar } from "@/shared/components/SnackbarProvider";
 import { useAnnouncements, useCreateAnnouncement } from "@/shared/hooks/useSupabaseData";
 import { useAuth } from "@/shared/hooks/useAuth";
-import { formatDistanceToNow } from "date-fns";
+import { DataTableToolbar } from "@/shared/components/DataTableToolbar";
+import { EmptyTableState } from "@/shared/components/EmptyTableState";
 
 export const AnnouncementsPage: React.FC = () => {
   const { show } = useSnackbar();
@@ -14,53 +16,187 @@ export const AnnouncementsPage: React.FC = () => {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [isPinned, setIsPinned] = useState(false);
+  const [search, setSearch] = useState("");
+  const [pinnedFilter, setPinnedFilter] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const canCreate = user?.role === "staff" || user?.role === "admin";
 
+  const filteredAnnouncements = useMemo(
+    () =>
+      (announcements || []).filter((announcement: any) => {
+        const target = `${announcement.title || ""} ${announcement.content || ""} ${announcement.profiles?.full_name || ""}`.toLowerCase();
+        const matchesSearch = target.includes(search.toLowerCase());
+        const matchesPinned =
+          !pinnedFilter ||
+          (pinnedFilter === "pinned" ? Boolean(announcement.is_pinned) : !announcement.is_pinned);
+        return matchesSearch && matchesPinned;
+      }),
+    [announcements, pinnedFilter, search]
+  );
+
   const handleSubmit = async () => {
-    if (!title.trim() || !content.trim()) { show("Fill all fields", "error"); return; }
+    if (!title.trim() || !content.trim()) {
+      show("Fill all fields", "error");
+      return;
+    }
+
     try {
       await createAnnouncement.mutateAsync({ title, content, isPinned });
       show("Announcement posted!", "success");
-      setTitle(""); setContent(""); setIsPinned(false); setShowForm(false);
-    } catch (err: any) { show(err.message, "error"); }
+      setTitle("");
+      setContent("");
+      setIsPinned(false);
+      setShowForm(false);
+    } catch (error: any) {
+      show(error.message, "error");
+    }
   };
 
-  if (isLoading) return <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-24 skeleton-shimmer rounded-xl" />)}</div>;
+  if (isLoading) {
+    return <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="h-24 rounded-xl skeleton-shimmer" />)}</div>;
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2"><Megaphone size={20} className="text-primary" /> Announcements</h1>
-          <p className="text-sm text-muted-foreground">System announcements and updates</p>
-        </div>
-        {canCreate && <button onClick={() => setShowForm(!showForm)} className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5"><Plus size={14} /> New Post</button>}
-      </div>
-      {showForm && (
-        <div className="bg-card border border-border rounded-xl p-5 space-y-4 animate-slide-up">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Announcement title" className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary transition-colors" />
-          <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Write your announcement..." rows={3} className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary transition-colors resize-none" />
-          <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-            <input type="checkbox" checked={isPinned} onChange={(e) => setIsPinned(e.target.checked)} className="rounded" /> Pin this announcement
+      <DataTableToolbar
+        title="Announcements"
+        description="Broadcast updates, keep key posts pinned, and review recent notices."
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search announcements, content, or author..."
+        filters={[
+          {
+            key: "pinned",
+            label: "Pinned",
+            value: pinnedFilter,
+            onChange: setPinnedFilter,
+            options: [
+              { label: "All", value: "" },
+              { label: "Pinned", value: "pinned" },
+              { label: "Standard", value: "standard" },
+            ],
+          },
+        ]}
+        actions={
+          canCreate ? (
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <Plus size={14} />
+              {showForm ? "Close Composer" : "New Post"}
+            </button>
+          ) : null
+        }
+        stats={[
+          <div key="total" className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Total</p>
+            <p className="text-lg font-bold text-foreground">{announcements?.length || 0}</p>
+          </div>,
+          <div key="pinned" className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pinned</p>
+            <p className="text-lg font-bold text-foreground">{(announcements || []).filter((item: any) => item.is_pinned).length}</p>
+          </div>,
+        ]}
+      />
+
+      {showForm ? (
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4 animate-slide-up">
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Announcement title"
+            className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground"
+          />
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder="Write your announcement..."
+            rows={4}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+          />
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" checked={isPinned} onChange={(event) => setIsPinned(event.target.checked)} className="rounded" />
+            Pin this announcement
           </label>
-          <button onClick={handleSubmit} disabled={createAnnouncement.isPending} className="h-10 px-4 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 disabled:opacity-50">Post</button>
+          <button
+            onClick={handleSubmit}
+            disabled={createAnnouncement.isPending}
+            className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            Post Announcement
+          </button>
         </div>
-      )}
-      {!announcements?.length ? (
-        <div className="bg-card border border-border rounded-xl p-12 text-center">
-          <Megaphone size={40} className="mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm font-medium text-foreground">No announcements yet</p>
+      ) : null}
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Title</th>
+                <th className="px-4 py-3 text-left font-semibold">Author</th>
+                <th className="px-4 py-3 text-left font-semibold">Audience</th>
+                <th className="px-4 py-3 text-left font-semibold">Published</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!filteredAnnouncements.length ? (
+                <EmptyTableState colSpan={6} title="No announcements yet" description="Posted announcements will appear in this table." />
+              ) : (
+                filteredAnnouncements.map((announcement: any) => (
+                  <React.Fragment key={announcement.id}>
+                    <tr className="border-t border-border/60">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-foreground">{announcement.title}</p>
+                        <p className="line-clamp-1 text-xs text-muted-foreground">{announcement.content}</p>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{announcement.profiles?.full_name || "System"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">All users</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {formatDistanceToNow(new Date(announcement.created_at), { addSuffix: true })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                            announcement.is_pinned ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {announcement.is_pinned ? "Pinned" : "Standard"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => setExpandedId(expandedId === announcement.id ? null : announcement.id)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                        >
+                          <Eye size={13} />
+                          {expandedId === announcement.id ? "Hide" : "View"}
+                        </button>
+                      </td>
+                    </tr>
+                    {expandedId === announcement.id ? (
+                      <tr className="border-t border-border/40 bg-muted/20">
+                        <td colSpan={6} className="px-4 py-4">
+                          <div className="rounded-xl border border-border bg-background p-4">
+                            <div className="flex items-center gap-2">
+                              {announcement.is_pinned ? <Pin size={14} className="text-primary" /> : null}
+                              <p className="text-sm font-semibold text-foreground">{announcement.title}</p>
+                            </div>
+                            <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{announcement.content}</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : announcements.map((a: any) => (
-        <div key={a.id} className="bg-card border border-border rounded-xl p-4 animate-slide-up">
-          <div className="flex items-center gap-2 mb-1">
-            {a.is_pinned && <Pin size={12} className="text-primary" />}
-            <p className="text-sm font-semibold text-foreground">{a.title}</p>
-          </div>
-          <p className="text-sm text-muted-foreground">{a.content}</p>
-          <p className="text-[11px] text-muted-foreground mt-2">{a.profiles?.full_name} · {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</p>
-        </div>
-      ))}
+      </div>
     </div>
   );
 };

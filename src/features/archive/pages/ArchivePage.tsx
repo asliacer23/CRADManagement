@@ -1,187 +1,225 @@
-import React, { useState, useEffect } from "react";
-import { Archive, Search, Award, CheckCircle2, User } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Award, CheckCircle2, Eye, User } from "lucide-react";
+import { format } from "date-fns";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import { useArchivedResearch } from "@/shared/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { DataTableToolbar } from "@/shared/components/DataTableToolbar";
+import { EmptyTableState } from "@/shared/components/EmptyTableState";
 
 export const ArchivePage: React.FC = () => {
   const { data: archived, isLoading } = useArchivedResearch();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [approvalData, setApprovalData] = useState<Record<string, any>>({});
 
-  const filtered = archived?.filter((r: any) => r.title.toLowerCase().includes(search.toLowerCase()) || r.research_code.toLowerCase().includes(search.toLowerCase())) || [];
+  const filteredArchive = useMemo(
+    () =>
+      (archived || []).filter((research: any) => {
+        const target = `${research.title || ""} ${research.research_code || ""} ${research.profiles?.full_name || ""}`.toLowerCase();
+        const matchesSearch = target.includes(search.toLowerCase());
+        const matchesStatus = !statusFilter || research.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      }),
+    [archived, search, statusFilter]
+  );
 
-  // Fetch approval and grade data when expanded
   useEffect(() => {
-    if (expandedId && !approvalData[expandedId]) {
-      const fetchApprovalData = async () => {
-        try {
-          const { data: approval, error: approvalErr } = await supabase
-            .from("final_approvals")
-            .select("*, approved_by_profile:profiles!approved_by(full_name)")
-            .eq("research_id", expandedId)
-            .single();
+    if (!expandedId || approvalData[expandedId]) return;
 
-          if (approvalErr && approvalErr.code !== "PGRST116") {
-            console.error("Error fetching approval:", approvalErr);
-            return;
-          }
+    const fetchApprovalData = async () => {
+      try {
+        const { data: approval, error: approvalErr } = await supabase
+          .from("final_approvals")
+          .select("*, approved_by_profile:profiles!approved_by(full_name)")
+          .eq("research_id", expandedId)
+          .single();
 
-          const { data: grades, error: gradesErr } = await supabase
-            .from("defense_grades")
-            .select("*, profiles!panelist_id(full_name)")
-            .eq("research_id", expandedId);
-
-          if (gradesErr) {
-            console.error("Error fetching grades:", gradesErr);
-            return;
-          }
-
-          setApprovalData(prev => ({
-            ...prev,
-            [expandedId]: { approval, grades }
-          }));
-        } catch (err) {
-          console.error("Error fetching data:", err);
+        if (approvalErr && approvalErr.code !== "PGRST116") {
+          console.error("Error fetching approval:", approvalErr);
+          return;
         }
-      };
 
-      fetchApprovalData();
-    }
-  }, [expandedId, approvalData]);
+        const { data: grades, error: gradesErr } = await supabase
+          .from("defense_grades")
+          .select("*, profiles!panelist_id(full_name)")
+          .eq("research_id", expandedId);
 
-  if (isLoading) return <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-16 skeleton-shimmer rounded-xl" />)}</div>;
+        if (gradesErr) {
+          console.error("Error fetching grades:", gradesErr);
+          return;
+        }
+
+        setApprovalData((previous) => ({
+          ...previous,
+          [expandedId]: { approval, grades },
+        }));
+      } catch (error) {
+        console.error("Error fetching archive details:", error);
+      }
+    };
+
+    fetchApprovalData();
+  }, [approvalData, expandedId]);
+
+  const statuses = Array.from(new Set((archived || []).map((research: any) => research.status).filter(Boolean)));
+
+  if (isLoading) {
+    return <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="h-16 rounded-xl skeleton-shimmer" />)}</div>;
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2"><Archive size={20} className="text-primary" /> Research Archive</h1>
-          <p className="text-sm text-muted-foreground">Browse completed and archived research</p>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-input bg-background">
-          <Search size={14} className="text-muted-foreground" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search archive..." className="bg-transparent text-sm outline-none placeholder:text-muted-foreground text-foreground w-40" />
+      <DataTableToolbar
+        title="Research Archive"
+        description="Completed and archived research with defense and approval history."
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by title, code, or leader..."
+        filters={[
+          {
+            key: "status",
+            label: "Status",
+            value: statusFilter,
+            onChange: setStatusFilter,
+            options: [{ label: "All", value: "" }, ...statuses.map((status) => ({ label: status, value: status }))],
+          },
+        ]}
+        stats={[
+          <div key="count" className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Archived</p>
+            <p className="text-lg font-bold text-foreground">{archived?.length || 0}</p>
+          </div>,
+        ]}
+      />
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Research</th>
+                <th className="px-4 py-3 text-left font-semibold">Leader</th>
+                <th className="px-4 py-3 text-left font-semibold">Department</th>
+                <th className="px-4 py-3 text-left font-semibold">Archived</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!filteredArchive.length ? (
+                <EmptyTableState colSpan={6} title="No archived research" description="Completed and archived research will appear here." />
+              ) : (
+                filteredArchive.map((research: any) => (
+                  <React.Fragment key={research.id}>
+                    <tr className="border-t border-border/60">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-foreground">{research.title}</p>
+                        <p className="text-xs font-mono text-muted-foreground">{research.research_code}</p>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{research.profiles?.full_name || "Unknown"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{research.departments?.name || "Not set"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{format(new Date(research.updated_at || research.created_at), "MMM d, yyyy")}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge variant={research.status}>{research.status}</StatusBadge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => setExpandedId(expandedId === research.id ? null : research.id)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                        >
+                          <Eye size={13} />
+                          {expandedId === research.id ? "Hide" : "Details"}
+                        </button>
+                      </td>
+                    </tr>
+                    {expandedId === research.id ? (
+                      <tr className="border-t border-border/40 bg-muted/20">
+                        <td colSpan={6} className="px-4 py-4">
+                          <ArchiveDetails research={research} data={approvalData[research.id]} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
-      {!filtered.length ? (
-        <div className="bg-card border border-border rounded-xl p-12 text-center">
-          <Archive size={40} className="mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm font-medium text-foreground">No archived research</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((r: any) => {
-            const data = approvalData[r.id];
-            const approval = data?.approval;
-            const grades = data?.grades || [];
-            const avgGrade = grades.length > 0 
-              ? grades.reduce((sum: number, g: any) => sum + Number(g.grade), 0) / grades.length 
-              : null;
-
-            return (
-              <div key={r.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                <button
-                  onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors min-h-[44px]"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground text-left">{r.title}</p>
-                    <p className="text-xs text-muted-foreground"><span className="font-mono">{r.research_code}</span> · {r.profiles?.full_name}</p>
-                  </div>
-                  <StatusBadge variant={r.status}>{r.status}</StatusBadge>
-                  <span className={`transition-transform text-xl ${expandedId === r.id ? "rotate-180" : ""}`}>
-                    ▼
-                  </span>
-                </button>
-
-                {expandedId === r.id && (
-                  <div className="border-t border-border p-4 space-y-3 bg-muted/20 animate-slide-down">
-                    {/* Group Members */}
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Group Members</p>
-                      <div className="flex flex-wrap gap-1">
-                        {r.research_members?.map((member: any, idx: number) => (
-                          <span key={idx} className="text-xs bg-background px-2.5 py-1 rounded border border-border text-foreground">
-                            {member.member_name}
-                            {member.is_leader && <span className="ml-1 text-primary font-semibold">(Leader)</span>}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Defense Grades Section */}
-                    {grades && grades.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                          <Award size={12} /> Defense Grades
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {grades.map((grade: any, idx: number) => (
-                            <div key={idx} className="bg-background border border-border rounded-lg p-2">
-                              <p className="text-xs text-muted-foreground">{grade.profiles?.full_name}</p>
-                              <div className="flex items-baseline gap-1 mt-0.5">
-                                <span className="text-sm font-bold text-foreground">{Number(grade.grade).toFixed(1)}</span>
-                                <span className="text-xs text-muted-foreground">/100</span>
-                              </div>
-                              {grade.remarks && (
-                                <p className="text-xs text-muted-foreground mt-1 italic line-clamp-2">{grade.remarks}</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        {avgGrade !== null && (
-                          <div className="bg-primary/10 border border-primary/20 rounded-lg p-2 mt-2">
-                            <p className="text-xs text-primary font-semibold">Average Grade</p>
-                            <p className="text-lg font-bold text-primary">{avgGrade.toFixed(1)} / 100</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Approval Information */}
-                    {approval && (
-                      <div>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                          <CheckCircle2 size={12} /> Approval Info
-                        </p>
-                        <div className="bg-background border border-border rounded-lg p-2 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">Status</span>
-                            <span className="text-xs font-semibold text-success capitalize">{approval.status}</span>
-                          </div>
-                          {approval.approved_by_profile && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <User size={10} /> Approved By
-                              </span>
-                              <span className="text-xs font-semibold text-foreground">{approval.approved_by_profile.full_name}</span>
-                            </div>
-                          )}
-                          {approval.approved_at && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-muted-foreground">Approved Date</span>
-                              <span className="text-xs text-foreground">{format(new Date(approval.approved_at), "MMM d, yyyy")}</span>
-                            </div>
-                          )}
-                          {approval.remarks && (
-                            <div className="mt-2 pt-2 border-t border-border">
-                              <p className="text-xs text-muted-foreground mb-1">Staff Remarks</p>
-                              <p className="text-xs text-foreground italic">{approval.remarks}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 };
+
+const ArchiveDetails: React.FC<{ research: any; data?: { approval?: any; grades?: any[] } }> = ({ research, data }) => {
+  const approval = data?.approval;
+  const grades = data?.grades || [];
+  const averageGrade =
+    grades.length > 0 ? grades.reduce((sum, grade) => sum + Number(grade.grade), 0) / grades.length : null;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Group Members</p>
+        <div className="flex flex-wrap gap-2">
+          {(research.research_members || []).map((member: any, index: number) => (
+            <span key={`${member.member_name}-${index}`} className="rounded-full border border-border bg-background px-3 py-1 text-xs text-foreground">
+              {member.member_name}
+              {member.is_leader ? " (Leader)" : ""}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {grades.length ? (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Award size={12} className="mr-1 inline" />
+            Defense Grades
+          </p>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {grades.map((grade: any) => (
+              <div key={grade.id} className="rounded-xl border border-border bg-background p-3">
+                <p className="text-xs text-muted-foreground">{grade.profiles?.full_name}</p>
+                <p className="mt-1 text-lg font-bold text-foreground">{Number(grade.grade).toFixed(1)} / 100</p>
+                {grade.remarks ? <p className="mt-1 text-xs italic text-muted-foreground">{grade.remarks}</p> : null}
+              </div>
+            ))}
+          </div>
+          {averageGrade !== null ? (
+            <div className="mt-2 rounded-xl border border-primary/20 bg-primary/10 px-3 py-3">
+              <p className="text-xs font-semibold text-primary">Average Grade</p>
+              <p className="text-lg font-bold text-primary">{averageGrade.toFixed(1)} / 100</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {approval ? (
+        <div className="rounded-xl border border-border bg-background p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <CheckCircle2 size={12} className="mr-1 inline" />
+            Approval Summary
+          </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <InfoLine label="Status" value={approval.status} />
+            <InfoLine label="Approved By" value={approval.approved_by_profile?.full_name || "System"} icon={<User size={12} />} />
+            <InfoLine label="Approved On" value={approval.approved_at ? format(new Date(approval.approved_at), "MMM d, yyyy") : "Not recorded"} />
+          </div>
+          {approval.remarks ? <p className="mt-3 text-sm italic text-muted-foreground">{approval.remarks}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const InfoLine = ({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) => (
+  <div className="rounded-lg border border-border px-3 py-3">
+    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+      {icon ? <span className="mr-1 inline-flex align-middle">{icon}</span> : null}
+      {label}
+    </p>
+    <p className="mt-2 text-sm font-medium capitalize text-foreground">{value}</p>
+  </div>
+);

@@ -1,10 +1,11 @@
-import React, { useState } from "react";
-import { CheckCircle2, XCircle, AlertCircle, Users, Award, MessageSquare } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { AlertCircle, Award, CheckCircle2, Eye, MessageSquare, Users, XCircle } from "lucide-react";
+import { format } from "date-fns";
 import { StatusBadge } from "@/shared/components/StatusBadge";
-import { TableSkeleton } from "@/shared/components/Skeletons";
+import { DataTableToolbar } from "@/shared/components/DataTableToolbar";
+import { EmptyTableState } from "@/shared/components/EmptyTableState";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
 
 export const PanelApprovalsPage: React.FC = () => {
   const { user } = useAuth();
@@ -15,13 +16,18 @@ export const PanelApprovalsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [panelDecisions, setPanelDecisions] = useState<Record<string, "approved" | "rejected" | null>>({});
   const [userRoles, setUserRoles] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
+  const [decisionFilter, setDecisionFilter] = useState("");
 
   React.useEffect(() => {
     const fetchMyDefenses = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        setDefenses([]);
+        setLoading(false);
+        return;
+      }
 
       try {
-        // Find ALL defenses where I am a panelist (leader or not)
         const { data: panelData, error: panelErr } = await supabase
           .from("defense_panel_members")
           .select("defense_id, role")
@@ -35,25 +41,22 @@ export const PanelApprovalsPage: React.FC = () => {
           return;
         }
 
-        // Store user roles for each defense
         const rolesMap: Record<string, string> = {};
-        panelData.forEach((p: any) => {
-          rolesMap[p.defense_id] = p.role;
+        panelData.forEach((panel: any) => {
+          rolesMap[panel.defense_id] = panel.role;
         });
         setUserRoles(rolesMap);
 
-        const defenseIds = panelData.map((p: any) => p.defense_id);
+        const defenseIds = panelData.map((panel: any) => panel.defense_id);
 
-        // Fetch defense details with research and grades
         const { data: defensesData, error: defensesErr } = await supabase
           .from("defense_schedules")
-          .select("*, research(id, title, research_code, submitted_by, research_members(member_name, is_leader), profiles!research(full_name))")
+          .select("*, defense_panel_members(*), research(id, title, research_code, submitted_by, research_members(member_name, is_leader), profiles!research(full_name))")
           .in("id", defenseIds)
           .eq("status", "completed");
 
         if (defensesErr) throw defensesErr;
 
-        // Fetch grades for each defense
         const enriched = await Promise.all(
           (defensesData || []).map(async (defense: any) => {
             const { data: grades, error: gradesErr } = await supabase
@@ -71,8 +74,8 @@ export const PanelApprovalsPage: React.FC = () => {
         );
 
         setDefenses(enriched);
-      } catch (err) {
-        console.error("Error fetching defenses:", err);
+      } catch (error) {
+        console.error("Error fetching defenses:", error);
       } finally {
         setLoading(false);
       }
@@ -81,11 +84,28 @@ export const PanelApprovalsPage: React.FC = () => {
     fetchMyDefenses();
   }, [user?.id]);
 
+  const filteredDefenses = useMemo(
+    () =>
+      defenses.filter((defense: any) => {
+        const computedDecision = panelDecisions[defense.id] || "";
+        const target = `${defense.research?.title || ""} ${defense.research?.research_code || ""} ${defense.room || ""}`.toLowerCase();
+        const matchesSearch = target.includes(search.toLowerCase());
+        const matchesDecision = !decisionFilter || computedDecision === decisionFilter;
+        return matchesSearch && matchesDecision;
+      }),
+    [decisionFilter, defenses, panelDecisions, search]
+  );
+
+  const stats = [
+    { label: "Completed", value: defenses.length },
+    { label: "Approved", value: Object.values(panelDecisions).filter((value) => value === "approved").length },
+    { label: "Rejected", value: Object.values(panelDecisions).filter((value) => value === "rejected").length },
+  ];
+
   const handleSubmitDecision = async (defenseId: string, decision: "approved" | "rejected") => {
     try {
       setSubmitting(true);
 
-      // Update defense_schedules notes with panel decision and remarks
       const noteContent = `Panel Leader Decision: ${decision.toUpperCase()}\nRemarks: ${remarks[defenseId] || "No remarks provided"}\nDecision Date: ${new Date().toISOString()}`;
 
       const { error } = await supabase
@@ -95,175 +115,246 @@ export const PanelApprovalsPage: React.FC = () => {
 
       if (error) throw error;
 
-      setPanelDecisions(prev => ({
-        ...prev,
-        [defenseId]: decision
+      setPanelDecisions((previous) => ({
+        ...previous,
+        [defenseId]: decision,
       }));
 
       setExpandedId(null);
-      setRemarks(prev => ({ ...prev, [defenseId]: "" }));
-    } catch (err: any) {
-      console.error("Error submitting decision:", err);
+      setRemarks((previous) => ({ ...previous, [defenseId]: "" }));
+    } catch (error: any) {
+      console.error("Error submitting decision:", error);
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-40 skeleton-shimmer rounded-xl" />)}</div>;
+    return <div className="space-y-4">{[1, 2, 3].map((item) => <div key={item} className="h-40 rounded-xl skeleton-shimmer" />)}</div>;
   }
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div>
-        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <CheckCircle2 size={20} className="text-primary" /> Panel Approvals
-        </h1>
-        <p className="text-sm text-muted-foreground">View panel grades and decisions</p>
-      </div>
+      <DataTableToolbar
+        title="Panel Approvals"
+        description="Review completed defenses, inspect grades, and capture the panel decision."
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by title, code, or room..."
+        filters={[
+          {
+            key: "decision",
+            label: "Decision",
+            value: decisionFilter,
+            onChange: setDecisionFilter,
+            options: [
+              { label: "All", value: "" },
+              { label: "Approved", value: "approved" },
+              { label: "Rejected", value: "rejected" },
+            ],
+          },
+        ]}
+        stats={stats.map((item) => (
+          <div key={item.label} className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{item.label}</p>
+            <p className="text-lg font-bold text-foreground">{item.value}</p>
+          </div>
+        ))}
+      />
 
-      {!defenses.length ? (
-        <div className="bg-card border border-border rounded-xl p-12 text-center">
-          <CheckCircle2 size={40} className="mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm font-medium text-foreground">No completed defenses</p>
-          <p className="text-xs text-muted-foreground mt-1">You will see completed defenses where you are assigned as a panelist.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {defenses.map((defense: any) => {
-            const avgGrade = defense.grades.length > 0
-              ? defense.grades.reduce((sum: number, g: any) => sum + Number(g.grade), 0) / defense.grades.length
-              : null;
-            const allGradesSubmitted = defense.defense_panel_members?.length > 0 && 
-              defense.grades.length === defense.defense_panel_members.length;
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Research</th>
+                <th className="px-4 py-3 text-left font-semibold">Leader</th>
+                <th className="px-4 py-3 text-left font-semibold">Date</th>
+                <th className="px-4 py-3 text-left font-semibold">Grades</th>
+                <th className="px-4 py-3 text-left font-semibold">My Role</th>
+                <th className="px-4 py-3 text-left font-semibold">Decision</th>
+                <th className="px-4 py-3 text-left font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!filteredDefenses.length ? (
+                <EmptyTableState
+                  colSpan={7}
+                  title="No completed defenses"
+                  description="You will see completed defenses here when you are assigned as a panelist."
+                />
+              ) : (
+                filteredDefenses.map((defense: any) => {
+                  const averageGrade =
+                    defense.grades.length > 0
+                      ? defense.grades.reduce((sum: number, grade: any) => sum + Number(grade.grade), 0) / defense.grades.length
+                      : null;
+                  const decision = panelDecisions[defense.id];
 
-            return (
-              <div
-                key={defense.id}
-                className="bg-card border border-border rounded-xl overflow-hidden transition-all"
-              >
-                <button
-                  onClick={() => setExpandedId(expandedId === defense.id ? null : defense.id)}
-                  className="w-full p-4 hover:bg-muted/50 transition-colors text-left"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground">{defense.research?.title}</p>
-                      <p className="text-xs text-muted-foreground font-mono mt-0.5">{defense.research?.research_code}</p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {defense.research?.research_members?.slice(0, 2).map((member: any, idx: number) => (
-                          <span key={idx} className="text-[11px] bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
-                            {member.member_name}
-                            {member.is_leader && " (Leader)"}
+                  return (
+                    <React.Fragment key={defense.id}>
+                      <tr className="border-t border-border/60">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-foreground">{defense.research?.title}</p>
+                          <p className="text-xs font-mono text-muted-foreground">{defense.research?.research_code}</p>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {defense.research?.profiles?.full_name || "Unknown"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {format(new Date(defense.defense_date), "MMM d, yyyy")}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {defense.grades.length}
+                          {averageGrade !== null ? ` submitted / avg ${averageGrade.toFixed(1)}` : " submitted"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium capitalize text-foreground">
+                            {userRoles[defense.id] || "panelist"}
                           </span>
-                        ))}
-                      </div>
-                    </div>
-                    <StatusBadge variant={panelDecisions[defense.id] === "approved" ? "active" : panelDecisions[defense.id] === "rejected" ? "rejected" : "pending"}>
-                      {panelDecisions[defense.id] ? panelDecisions[defense.id] : "Pending"}
-                    </StatusBadge>
-                  </div>
-                </button>
-
-                {expandedId === defense.id && (
-                  <div className="border-t border-border p-4 space-y-4 bg-muted/20 animate-slide-down">
-                    {/* Grades Display */}
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                        <Award size={12} /> Panelist Grades ({defense.grades.length})
-                      </p>
-                      {defense.grades.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">No grades submitted yet</p>
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-2 gap-2">
-                            {defense.grades.map((grade: any, idx: number) => (
-                              <div key={idx} className="bg-background border border-border rounded-lg p-2">
-                                <p className="text-xs text-muted-foreground">{grade.profiles?.full_name}</p>
-                                <div className="flex items-baseline gap-1 mt-0.5">
-                                  <span className="text-sm font-bold text-foreground">{Number(grade.grade).toFixed(1)}</span>
-                                  <span className="text-xs text-muted-foreground">/100</span>
-                                </div>
-                                {grade.remarks && (
-                                  <p className="text-xs text-muted-foreground mt-1 italic line-clamp-2">{grade.remarks}</p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          {avgGrade !== null && (
-                            <div className="bg-primary/10 border border-primary/20 rounded-lg p-2 mt-2">
-                              <p className="text-xs text-primary font-semibold">Panel Average</p>
-                              <p className="text-lg font-bold text-primary">{avgGrade.toFixed(1)} / 100</p>
-                            </div>
-                          )}
-                        </>
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge variant={decision === "approved" ? "active" : decision === "rejected" ? "rejected" : "pending"}>
+                            {decision || "Pending"}
+                          </StatusBadge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setExpandedId(expandedId === defense.id ? null : defense.id)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                          >
+                            <Eye size={13} />
+                            {expandedId === defense.id ? "Hide" : "Review"}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedId === defense.id && (
+                        <tr className="border-t border-border/40 bg-muted/20">
+                          <td colSpan={7} className="px-4 py-4">
+                            <PanelApprovalDetails
+                              defense={defense}
+                              remarks={remarks[defense.id] || ""}
+                              role={userRoles[defense.id]}
+                              decision={decision}
+                              submitting={submitting}
+                              onRemarksChange={(value) => setRemarks((previous) => ({ ...previous, [defense.id]: value }))}
+                              onApprove={() => handleSubmitDecision(defense.id, "approved")}
+                              onReject={() => handleSubmitDecision(defense.id, "rejected")}
+                            />
+                          </td>
+                        </tr>
                       )}
-                    </div>
-
-                    {/* Panel Remarks - Only for Leader */}
-                    {userRoles[defense.id] === "leader" && (
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
-                          <MessageSquare size={12} className="inline mr-1" /> Panel Decision Remarks
-                        </label>
-                        <textarea
-                          value={remarks[defense.id] || ""}
-                          onChange={(e) => setRemarks(prev => ({ ...prev, [defense.id]: e.target.value }))}
-                          placeholder="Provide your panel's decision reasoning and any relevant remarks..."
-                          className="w-full h-20 px-3 py-2 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary transition-colors resize-none"
-                        />
-                      </div>
-                    )}
-
-                    {/* Action Buttons - Only for Leader */}
-                    {userRoles[defense.id] === "leader" ? (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSubmitDecision(defense.id, "approved")}
-                          disabled={submitting || defense.grades.length === 0}
-                          className="flex-1 h-10 rounded-lg bg-success/10 text-success font-semibold text-sm hover:bg-success/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {submitting ? (
-                            <div className="h-3 w-3 border-2 border-success/30 border-t-success rounded-full animate-spin" />
-                          ) : (
-                            <CheckCircle2 size={16} />
-                          )}
-                          Panel Approves
-                        </button>
-                        <button
-                          onClick={() => handleSubmitDecision(defense.id, "rejected")}
-                          disabled={submitting || defense.grades.length === 0}
-                          className="flex-1 h-10 rounded-lg bg-destructive/10 text-destructive font-semibold text-sm hover:bg-destructive/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {submitting ? (
-                            <div className="h-3 w-3 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin" />
-                          ) : (
-                            <XCircle size={16} />
-                          )}
-                          Panel Rejects
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-                        <p className="text-xs text-blue-600 font-medium flex items-center gap-2">
-                          <CheckCircle2 size={14} /> Waiting for panel leader decision
-                        </p>
-                        <p className="text-xs text-blue-600/70 mt-1">The panel leader will review all grades and make the final panel decision.</p>
-                      </div>
-                    )}
-
-                    {defense.grades.length === 0 && userRoles[defense.id] === "leader" && (
-                      <p className="text-xs text-warning bg-warning/10 px-2 py-1.5 rounded border border-warning/20 flex items-center gap-1">
-                        <AlertCircle size={12} /> All panelists must submit grades before you can make a decision
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
     </div>
   );
 };
+
+const PanelApprovalDetails: React.FC<{
+  defense: any;
+  role?: string;
+  remarks: string;
+  decision: "approved" | "rejected" | null | undefined;
+  submitting: boolean;
+  onRemarksChange: (value: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}> = ({ defense, role, remarks, decision, submitting, onRemarksChange, onApprove, onReject }) => {
+  const averageGrade =
+    defense.grades.length > 0
+      ? defense.grades.reduce((sum: number, grade: any) => sum + Number(grade.grade), 0) / defense.grades.length
+      : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <DetailCard label="Panelists" value={`${defense.defense_panel_members?.length || 0}`} icon={<Users size={13} />} />
+        <DetailCard label="Grades Submitted" value={`${defense.grades.length}`} icon={<Award size={13} />} />
+        <DetailCard label="Average Grade" value={averageGrade !== null ? `${averageGrade.toFixed(1)} / 100` : "Not available"} icon={<CheckCircle2 size={13} />} />
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Panelist Grades</p>
+        {!defense.grades.length ? (
+          <p className="text-xs italic text-muted-foreground">No grades submitted yet.</p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {defense.grades.map((grade: any) => (
+              <div key={grade.id} className="rounded-xl border border-border bg-background p-3">
+                <p className="text-xs text-muted-foreground">{grade.profiles?.full_name}</p>
+                <p className="mt-1 text-lg font-bold text-foreground">{Number(grade.grade).toFixed(1)} / 100</p>
+                {grade.remarks ? <p className="mt-1 text-xs italic text-muted-foreground">{grade.remarks}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {role === "leader" ? (
+        <div className="space-y-3 rounded-xl border border-border bg-background p-4">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <MessageSquare size={12} className="mr-1 inline" />
+              Panel Remarks
+            </p>
+            <textarea
+              value={remarks}
+              onChange={(event) => onRemarksChange(event.target.value)}
+              placeholder="Summarize the panel decision and next steps..."
+              className="h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={onApprove}
+              disabled={submitting || defense.grades.length === 0}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-success/10 px-4 text-sm font-semibold text-success transition-colors hover:bg-success/20 disabled:opacity-50"
+            >
+              <CheckCircle2 size={15} />
+              Approve
+            </button>
+            <button
+              onClick={onReject}
+              disabled={submitting || defense.grades.length === 0}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-destructive/10 px-4 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
+            >
+              <XCircle size={15} />
+              Reject
+            </button>
+            {decision ? (
+              <span className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-xs font-medium text-muted-foreground">
+                Latest decision: {decision}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
+          The panel leader will record the final panel decision after reviewing all grades.
+        </div>
+      )}
+
+      {defense.grades.length === 0 && role === "leader" ? (
+        <div className="flex items-center gap-2 rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+          <AlertCircle size={14} />
+          All panelists must submit their grades before the leader can finalize a decision.
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const DetailCard = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
+  <div className="rounded-xl border border-border bg-background px-3 py-3">
+    <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+      {icon} {label}
+    </p>
+    <p className="mt-2 text-sm font-semibold text-foreground">{value}</p>
+  </div>
+);

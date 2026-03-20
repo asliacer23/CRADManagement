@@ -29,6 +29,10 @@ import { FinalApprovalsPage } from "@/features/admin/pages/FinalApprovalsPage";
 import { PanelApprovalsPage } from "@/features/defense/pages/PanelApprovalsPage";
 import { ProfilePage } from "@/features/profile/pages/ProfilePage";
 import { RegistrarIntegrationPage } from "@/features/integrations/pages/RegistrarIntegrationPage";
+import { RegistrarStudentsPage } from "@/features/integrations/pages/RegistrarStudentsPage";
+import { GuidanceRecommendationsPage } from "@/features/integrations/pages/GuidanceRecommendationsPage";
+import { CashierIntegrationPage } from "@/features/integrations/pages/CashierIntegrationPage";
+import { PmedReportsPage } from "@/features/integrations/pages/PmedReportsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -62,7 +66,13 @@ const ProtectedRoutes = () => {
         <Route path="/admin/settings" element={<SystemSettingsPage />} />
         <Route path="/admin/logs" element={<AuditLogsPage />} />
         <Route path="/admin/final-approvals" element={<FinalApprovalsPage />} />
+        <Route path="/integrations" element={<RegistrarIntegrationPage />} />
         <Route path="/integrations/registrar" element={<RegistrarIntegrationPage />} />
+        <Route path="/integrations/student-list" element={<RegistrarStudentsPage />} />
+        <Route path="/integrations/registrar/students" element={<RegistrarStudentsPage />} />
+        <Route path="/integrations/guidance/recommendations" element={<GuidanceRecommendationsPage />} />
+        <Route path="/integrations/cashier" element={<CashierIntegrationPage />} />
+        <Route path="/integrations/pmed/reports" element={<PmedReportsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

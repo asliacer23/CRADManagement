@@ -3,14 +3,140 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "./useAuth";
 
+const crad = supabase.schema("crad") as any;
+
+function getBypassAdminDashboardData() {
+  return {
+    summary: {
+      totalUsers: 6,
+      totalResearch: 5,
+      pendingResearch: 2,
+      scheduledDefenses: 1,
+      pendingPayments: 2,
+      pendingFinalApprovals: 1,
+      archivedResearch: 1,
+      totalAnnouncements: 2,
+      pendingManuscripts: 2,
+    },
+    roleCounts: { student: 3, adviser: 1, staff: 1, admin: 1 },
+    researchStatusCounts: { pending: 1, approved: 1, pending_final_approval: 1, archived: 1, review: 1 },
+    manuscriptStatusCounts: { approved: 2, submitted: 1, under_review: 1 },
+    paymentStatusCounts: { submitted: 1, verified: 2, pending: 1 },
+    defenseStatusCounts: { scheduled: 1, completed: 2 },
+    approvalStatusCounts: { pending: 1, approved: 1 },
+    departmentAnalytics: [
+      { department: "Information Technology", code: "IT", totalResearch: 3, activePipeline: 2, archived: 1 },
+      { department: "Computer Science", code: "CS", totalResearch: 2, activePipeline: 2, archived: 0 },
+    ],
+    recentResearch: [
+      { id: "1", title: "Student Wellness Appointment Assistant", research_code: "R-2026-205", status: "review", created_at: new Date().toISOString(), profiles: { full_name: "Paolo Ramos" }, departments: { code: "CS" } },
+      { id: "2", title: "Community Research Repository and Archival Dashboard", research_code: "R-2026-204", status: "archived", created_at: new Date(Date.now() - 86400000).toISOString(), profiles: { full_name: "Ana Reyes" }, departments: { code: "IT" } },
+      { id: "3", title: "AI-Powered Attendance Analytics for Student Intervention", research_code: "R-2026-203", status: "pending_final_approval", created_at: new Date(Date.now() - 172800000).toISOString(), profiles: { full_name: "Ana Reyes" }, departments: { code: "CS" } },
+    ],
+    pendingPaymentsList: [
+      { id: "1", payment_code: "PAY-9204", amount: 2500, status: "pending", research: { title: "Student Wellness Appointment Assistant", research_code: "R-2026-205" }, submitted_by_profile: { full_name: "Paolo Ramos" } },
+      { id: "2", payment_code: "PAY-9201", amount: 2500, status: "submitted", research: { title: "Smart Inventory Tracking System for Campus Laboratories", research_code: "R-2026-201" }, submitted_by_profile: { full_name: "Juan Dela Cruz" } },
+    ],
+    pendingApprovalsList: [
+      { id: "1", status: "pending", created_at: new Date().toISOString(), research: { title: "AI-Powered Attendance Analytics for Student Intervention", research_code: "R-2026-203" } },
+    ],
+    upcomingDefenses: [
+      { id: "1", defense_date: new Date(Date.now() + 7 * 86400000).toISOString(), defense_time: "09:00", room: "Room 301", status: "scheduled", research: { title: "Barangay Request Management Portal", research_code: "R-2026-202" } },
+    ],
+    recentLogs: [
+      { id: "1", action: "DEFENSE_COMPLETED", details: "Completed defense workflow for AI-Powered Attendance Analytics.", created_at: new Date().toISOString(), profiles: { full_name: "CRAD Staff", email: "staff.seed@crad.local" } },
+      { id: "2", action: "PAYMENT_VERIFIED", details: "Verified payment PAY-9202 for Barangay Request Management Portal.", created_at: new Date(Date.now() - 86400000).toISOString(), profiles: { full_name: "CRAD Staff", email: "staff.seed@crad.local" } },
+    ],
+    recentAnnouncements: [
+      { id: "1", title: "Panel Scheduling Open", is_pinned: false, created_at: new Date().toISOString() },
+      { id: "2", title: "CRAD Demo Workspace Ready", is_pinned: true, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
+    ],
+    chartData: [
+      { status: "pending", created_at: new Date(Date.now() - 40 * 86400000).toISOString() },
+      { status: "approved", created_at: new Date(Date.now() - 30 * 86400000).toISOString() },
+      { status: "pending_final_approval", created_at: new Date(Date.now() - 24 * 86400000).toISOString() },
+      { status: "archived", created_at: new Date(Date.now() - 70 * 86400000).toISOString() },
+      { status: "review", created_at: new Date(Date.now() - 18 * 86400000).toISOString() },
+    ],
+  };
+}
+
+function getBypassDefenseSchedules() {
+  return [
+    {
+      id: "45000000-0000-0000-0000-000000000201",
+      defense_date: new Date(Date.now() + 7 * 86400000).toISOString(),
+      defense_time: "09:00",
+      room: "Room 301",
+      status: "scheduled",
+      research: {
+        id: "40000000-0000-0000-0000-000000000202",
+        title: "Barangay Request Management Portal",
+        research_code: "R-2026-202",
+        submitted_by: "d50e8400-e29b-41d4-a716-446655440004",
+        departments: { code: "IT", name: "Information Technology" },
+        research_members: [
+          { member_name: "Juan Dela Cruz", is_leader: true },
+          { member_name: "Carlo Mendoza", is_leader: false },
+        ],
+      },
+      defense_panel_members: [
+        { panelist_id: "d50e8400-e29b-41d4-a716-446655440003", role: "leader", profiles: { full_name: "Prof. Maria Santos" } },
+        { panelist_id: "d50e8400-e29b-41d4-a716-446655440001", role: "panelist", profiles: { full_name: "CRAD Admin" } },
+      ],
+    },
+    {
+      id: "45000000-0000-0000-0000-000000000202",
+      defense_date: new Date(Date.now() - 2 * 86400000).toISOString(),
+      defense_time: "13:00",
+      room: "Research Hall A",
+      status: "completed",
+      research: {
+        id: "40000000-0000-0000-0000-000000000203",
+        title: "AI-Powered Attendance Analytics for Student Intervention",
+        research_code: "R-2026-203",
+        submitted_by: "d50e8400-e29b-41d4-a716-446655440005",
+        departments: { code: "CS", name: "Computer Science" },
+        research_members: [
+          { member_name: "Ana Reyes", is_leader: true },
+          { member_name: "Paolo Ramos", is_leader: false },
+        ],
+      },
+      defense_panel_members: [
+        { panelist_id: "d50e8400-e29b-41d4-a716-446655440003", role: "leader", profiles: { full_name: "Prof. Maria Santos" } },
+        { panelist_id: "d50e8400-e29b-41d4-a716-446655440001", role: "panelist", profiles: { full_name: "CRAD Admin" } },
+      ],
+    },
+    {
+      id: "45000000-0000-0000-0000-000000000203",
+      defense_date: new Date(Date.now() - 15 * 86400000).toISOString(),
+      defense_time: "10:30",
+      room: "Research Hall B",
+      status: "completed",
+      research: {
+        id: "40000000-0000-0000-0000-000000000204",
+        title: "Community Research Repository and Archival Dashboard",
+        research_code: "R-2026-204",
+        submitted_by: "d50e8400-e29b-41d4-a716-446655440005",
+        departments: { code: "IT", name: "Information Technology" },
+        research_members: [
+          { member_name: "Ana Reyes", is_leader: true },
+        ],
+      },
+      defense_panel_members: [
+        { panelist_id: "d50e8400-e29b-41d4-a716-446655440003", role: "leader", profiles: { full_name: "Prof. Maria Santos" } },
+      ],
+    },
+  ];
+}
+
 // ==================== RESEARCH ====================
 export function useMyResearch() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["my-research", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("research")
+      const { data, error } = await crad.from("research")
         .select("*, research_categories(name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name)), research_members(member_name, is_leader)")
         .eq("submitted_by", user!.id)
         .order("created_at", { ascending: false });
@@ -26,8 +152,7 @@ export function useAllResearch() {
   return useQuery({
     queryKey: ["all-research"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("research")
+      const { data, error } = await crad.from("research")
         .select("*, profiles!submitted_by(full_name), research_categories(name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name)), research_members(member_name, is_leader)")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -42,15 +167,13 @@ export function useResearchByAdviser() {
   return useQuery({
     queryKey: ["adviser-research", user?.id],
     queryFn: async () => {
-      const { data: assignments, error: aErr } = await supabase
-        .from("adviser_assignments")
+      const { data: assignments, error: aErr } = await crad.from("adviser_assignments")
         .select("research_id")
         .eq("adviser_id", user!.id);
       if (aErr) throw aErr;
       const ids = assignments?.map((a: any) => a.research_id) || [];
       if (ids.length === 0) return [];
-      const { data, error } = await supabase
-        .from("research")
+      const { data, error } = await crad.from("research")
         .select("*, profiles!submitted_by(full_name), research_categories(name), research_members(member_name, is_leader)")
         .in("id", ids)
         .order("created_at", { ascending: false });
@@ -69,8 +192,7 @@ export function useSubmitResearch() {
     mutationFn: async ({ title, abstract, categoryId, departmentId, members }: {
       title: string; abstract: string; categoryId?: string; departmentId?: string; members: string[];
     }) => {
-      const { data: research, error } = await supabase
-        .from("research")
+      const { data: research, error } = await crad.from("research")
         .insert({ title, abstract, category_id: categoryId || null, department_id: departmentId || null, submitted_by: user!.id, status: "pending", research_code: "" })
         .select()
         .single();
@@ -83,7 +205,7 @@ export function useSubmitResearch() {
           is_leader: i === 0,
         }));
         if (memberRows.length > 0) {
-          await supabase.from("research_members").insert(memberRows);
+          await crad.from("research_members").insert(memberRows);
         }
       }
 
@@ -109,8 +231,7 @@ export function useUpdateResearchStatus() {
     mutationFn: async ({ researchId, status, userId, title }: {
       researchId: string; status: string; userId: string; title: string;
     }) => {
-      const { error } = await supabase
-        .from("research")
+      const { error } = await crad.from("research")
         .update({ status: status as any })
         .eq("id", researchId);
       if (error) throw error;
@@ -136,8 +257,7 @@ export function useManuscripts(researchId?: string) {
   return useQuery({
     queryKey: ["manuscripts", researchId],
     queryFn: async () => {
-      let query = supabase
-        .from("manuscripts")
+      let query = crad.from("manuscripts")
         .select("*, research(title, research_code, submitted_by), uploaded_by_profile:profiles!uploaded_by(full_name), reviewed_by_profile:profiles!reviewed_by(full_name)")
         .order("created_at", { ascending: false });
       if (researchId) query = query.eq("research_id", researchId);
@@ -153,8 +273,7 @@ export function useManuscriptHistory(researchId: string) {
   return useQuery({
     queryKey: ["manuscript-history", researchId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("manuscripts")
+      const { data, error } = await crad.from("manuscripts")
         .select("*, uploaded_by_profile:profiles!uploaded_by(full_name), reviewed_by_profile:profiles!reviewed_by(full_name)")
         .eq("research_id", researchId)
         .order("version_number", { ascending: true });
@@ -172,8 +291,7 @@ export function useUploadManuscript() {
     mutationFn: async ({ researchId, file, versionNotes }: {
       researchId: string; file: File; versionNotes: string;
     }) => {
-      const { data: existing } = await supabase
-        .from("manuscripts")
+      const { data: existing } = await crad.from("manuscripts")
         .select("version_number")
         .eq("research_id", researchId)
         .order("version_number", { ascending: false })
@@ -182,12 +300,11 @@ export function useUploadManuscript() {
 
       const filePath = `${user!.id}/${researchId}/${Date.now()}_${file.name}`;
       const { error: uploadErr } = await supabase.storage
-        .from("manuscripts")
+        crad.from("manuscripts")
         .upload(filePath, file);
       if (uploadErr) throw uploadErr;
 
-      const { data, error } = await supabase
-        .from("manuscripts")
+      const { data, error } = await crad.from("manuscripts")
         .insert({
           research_id: researchId,
           version_number: nextVersion,
@@ -215,8 +332,7 @@ export function useUpdateManuscriptStatus() {
     mutationFn: async ({ manuscriptId, status, userId, title }: {
       manuscriptId: string; status: string; userId: string; title: string;
     }) => {
-      const { error } = await supabase
-        .from("manuscripts")
+      const { error } = await crad.from("manuscripts")
         .update({ status: status as any, reviewed_by: user!.id, reviewed_at: new Date().toISOString() })
         .eq("id", manuscriptId);
       if (error) throw error;
@@ -240,8 +356,7 @@ export function useMyPayments() {
   return useQuery({
     queryKey: ["my-payments", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payments")
+      const { data, error } = await crad.from("payments")
         .select("*, research(title, research_code)")
         .eq("submitted_by", user!.id)
         .order("created_at", { ascending: false });
@@ -257,8 +372,7 @@ export function usePendingPayments() {
   return useQuery({
     queryKey: ["pending-payments"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payments")
+      const { data, error } = await crad.from("payments")
         .select("*, research(title, research_code), submitted_by_profile:profiles!submitted_by(full_name)")
         .in("status", ["pending", "submitted"])
         .order("created_at", { ascending: false });
@@ -282,8 +396,7 @@ export function useSubmitPayment() {
 
       let paymentAmount = amount;
       if (paymentAmount == null) {
-        const { data: feeSetting, error: feeError } = await supabase
-          .from("system_settings")
+        const { data: feeSetting, error: feeError } = await crad.from("system_settings")
           .select("value")
           .eq("key", "research_fee")
           .maybeSingle();
@@ -293,8 +406,7 @@ export function useSubmitPayment() {
         paymentAmount = Number.isFinite(parsedFee) && parsedFee > 0 ? parsedFee : 2500;
       }
 
-      const { data, error } = await supabase
-        .from("payments")
+      const { data, error } = await crad.from("payments")
         .insert({
           research_id: researchId,
           amount: paymentAmount,
@@ -324,8 +436,7 @@ export function useVerifyPayment() {
     mutationFn: async ({ paymentId, status, userId, paymentCode }: {
       paymentId: string; status: "verified" | "rejected"; userId: string; paymentCode: string;
     }) => {
-      const { error } = await supabase
-        .from("payments")
+      const { error } = await crad.from("payments")
         .update({ status, verified_by: user!.id, verified_at: new Date().toISOString() })
         .eq("id", paymentId);
       if (error) throw error;
@@ -352,8 +463,7 @@ export function useAllPayments(status?: Database["public"]["Enums"]["payment_sta
   return useQuery({
     queryKey: ["all-payments", status],
     queryFn: async () => {
-      let query = supabase
-        .from("payments")
+      let query = crad.from("payments")
         .select("*, research(title, research_code), submitted_by_profile:profiles!submitted_by(full_name), verified_by_profile:profiles!verified_by(full_name)");
       
       if (status) {
@@ -370,17 +480,23 @@ export function useAllPayments(status?: Database["public"]["Enums"]["payment_sta
 
 // ==================== DEFENSE ====================
 export function useDefenseSchedules() {
+  const { user } = useAuth();
   return useQuery({
-    queryKey: ["defense-schedules"],
+    queryKey: ["defense-schedules", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("defense_schedules")
-        .select("*, research(id, title, research_code, submitted_by), defense_panel_members(panelist_id, role, profiles!panelist_id(full_name))")
+      if (user?.isBypass) {
+        return getBypassDefenseSchedules();
+      }
+
+      const { data, error } = await crad.from("defense_schedules")
+        .select("*, research(id, title, research_code, submitted_by, departments(code, name), research_members(member_name, is_leader)), defense_panel_members(panelist_id, role, profiles!panelist_id(full_name))")
         .order("defense_date", { ascending: true });
       if (error) throw error;
       return data;
     },
+    enabled: !!user,
     staleTime: 1000 * 60 * 2,
+    retry: user?.isBypass ? false : 1,
   });
 }
 
@@ -391,15 +507,14 @@ export function useCreateDefense() {
     mutationFn: async ({ researchId, date, time, room, panelistIds }: {
       researchId: string; date: string; time: string; room: string; panelistIds?: string[];
     }) => {
-      const { data, error } = await supabase
-        .from("defense_schedules")
+      const { data, error } = await crad.from("defense_schedules")
         .insert({ research_id: researchId, defense_date: date, defense_time: time, room, created_by: user!.id })
         .select("*, research(title, submitted_by)")
         .single();
       if (error) throw error;
 
       if (panelistIds?.length) {
-        await supabase.from("defense_panel_members").insert(
+        await crad.from("defense_panel_members").insert(
           panelistIds.map(pid => ({ defense_id: data.id, panelist_id: pid }))
         );
       }
@@ -426,16 +541,14 @@ export function useUpdateDefenseStatus() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ defenseId, status }: { defenseId: string; status: "scheduled" | "completed" | "cancelled" }) => {
-      const { error } = await supabase
-        .from("defense_schedules")
+      const { error } = await crad.from("defense_schedules")
         .update({ status, updated_at: new Date().toISOString() })
         .eq("id", defenseId);
       if (error) throw error;
 
       // Send notification when marked as completed
       if (status === "completed") {
-        const { data: defense } = await supabase
-          .from("defense_schedules")
+        const { data: defense } = await crad.from("defense_schedules")
           .select("*, research(id, title, submitted_by)")
           .eq("id", defenseId)
           .single();
@@ -469,8 +582,7 @@ export function useNotifications() {
   return useQuery({
     queryKey: ["notifications", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("notifications")
+      const { data, error } = await crad.from("notifications")
         .select("*")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false })
@@ -489,8 +601,7 @@ export function useUnreadCount() {
   return useQuery({
     queryKey: ["unread-count", user?.id],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("notifications")
+      const { count, error } = await crad.from("notifications")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user!.id)
         .eq("is_read", false);
@@ -507,8 +618,7 @@ export function useMarkNotificationRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (notificationId: string) => {
-      const { error } = await supabase
-        .from("notifications")
+      const { error } = await crad.from("notifications")
         .update({ is_read: true })
         .eq("id", notificationId);
       if (error) throw error;
@@ -525,8 +635,7 @@ export function useMarkAllRead() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("notifications")
+      const { error } = await crad.from("notifications")
         .update({ is_read: true })
         .eq("user_id", user!.id)
         .eq("is_read", false);
@@ -544,8 +653,7 @@ export function useAnnouncements() {
   return useQuery({
     queryKey: ["announcements"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("announcements")
+      const { data, error } = await crad.from("announcements")
         .select("*, profiles!created_by(full_name)")
         .order("is_pinned", { ascending: false })
         .order("created_at", { ascending: false });
@@ -561,8 +669,7 @@ export function useCreateAnnouncement() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ title, content, isPinned }: { title: string; content: string; isPinned?: boolean }) => {
-      const { data, error } = await supabase
-        .from("announcements")
+      const { data, error } = await crad.from("announcements")
         .insert({ title, content, is_pinned: isPinned || false, created_by: user!.id })
         .select()
         .single();
@@ -583,7 +690,7 @@ export function useDeleteAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("announcements").delete().eq("id", id);
+      const { error } = await crad.from("announcements").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
@@ -595,8 +702,7 @@ export function useRemarks(researchId?: string) {
   return useQuery({
     queryKey: ["remarks", researchId],
     queryFn: async () => {
-      let query = supabase
-        .from("remarks")
+      let query = crad.from("remarks")
         .select("*, profiles!author_id(full_name), research(title, research_code, submitted_by)")
         .order("created_at", { ascending: false });
       if (researchId) query = query.eq("research_id", researchId);
@@ -615,8 +721,7 @@ export function useCreateRemark() {
     mutationFn: async ({ researchId, message, manuscriptId }: {
       researchId: string; message: string; manuscriptId?: string;
     }) => {
-      const { data, error } = await supabase
-        .from("remarks")
+      const { data, error } = await crad.from("remarks")
         .insert({ research_id: researchId, message, author_id: user!.id, manuscript_id: manuscriptId || null })
         .select("*, research(title, submitted_by)")
         .single();
@@ -640,13 +745,12 @@ export function useUnassignedResearch() {
   return useQuery({
     queryKey: ["unassigned-research"],
     queryFn: async () => {
-      const { data: assigned } = await supabase.from("adviser_assignments").select("research_id");
+      const { data: assigned } = await crad.from("adviser_assignments").select("research_id");
       const assignedIds = assigned?.map((a: any) => a.research_id) || [];
 
-      let query = supabase.from("research").select("*, profiles!submitted_by(full_name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name))").order("created_at", { ascending: false });
+      let query = crad.from("research").select("*, profiles!submitted_by(full_name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name))").order("created_at", { ascending: false });
       if (assignedIds.length > 0) {
-        const { data, error } = await supabase
-          .from("research")
+        const { data, error } = await crad.from("research")
           .select("*, profiles!submitted_by(full_name), departments(name, code), adviser_assignments(adviser_id, profiles!adviser_id(full_name))")
           .not("id", "in", `(${assignedIds.join(",")})`)
           .order("created_at", { ascending: false });
@@ -665,8 +769,7 @@ export function useAdvisers() {
   return useQuery({
     queryKey: ["advisers"],
     queryFn: async () => {
-      const { data: profiles, error } = await supabase
-        .from("profiles")
+      const { data: profiles, error } = await crad.from("profiles")
         .select("*")
         .order("full_name");
       if (error) throw error;
@@ -695,10 +798,9 @@ export function useAssignAdviser() {
     mutationFn: async ({ researchId, adviserId, title }: {
       researchId: string; adviserId: string; title: string;
     }) => {
-      const { data: research } = await supabase.from("research").select("submitted_by").eq("id", researchId).single();
+      const { data: research } = await crad.from("research").select("submitted_by").eq("id", researchId).single();
 
-      const { error } = await supabase
-        .from("adviser_assignments")
+      const { error } = await crad.from("adviser_assignments")
         .insert({ research_id: researchId, adviser_id: adviserId, assigned_by: user!.id });
       if (error) throw error;
 
@@ -725,7 +827,7 @@ export function useAssignMultipleAdvisers() {
     mutationFn: async ({ researchId, adviserIds, title }: {
       researchId: string; adviserIds: string[]; title: string;
     }) => {
-      const { data: research } = await supabase.from("research").select("submitted_by").eq("id", researchId).single();
+      const { data: research } = await crad.from("research").select("submitted_by").eq("id", researchId).single();
 
       const assignments = adviserIds.map((adviserId) => ({
         research_id: researchId,
@@ -733,8 +835,7 @@ export function useAssignMultipleAdvisers() {
         assigned_by: user!.id,
       }));
 
-      const { error } = await supabase
-        .from("adviser_assignments")
+      const { error } = await crad.from("adviser_assignments")
         .insert(assignments);
       if (error) throw error;
 
@@ -767,8 +868,7 @@ export function useRemoveAdviserAssignment() {
     mutationFn: async ({ researchId, adviserId }: {
       researchId: string; adviserId: string;
     }) => {
-      const { error } = await supabase
-        .from("adviser_assignments")
+      const { error } = await crad.from("adviser_assignments")
         .delete()
         .eq("research_id", researchId)
         .eq("adviser_id", adviserId);
@@ -788,8 +888,7 @@ export function useAdviserWorkload() {
   return useQuery({
     queryKey: ["adviser-workload"],
     queryFn: async () => {
-      const { data: advisers, error: adviserError } = await supabase
-        .from("profiles")
+      const { data: advisers, error: adviserError } = await crad.from("profiles")
         .select("*")
         .order("full_name");
       if (adviserError) throw adviserError;
@@ -807,8 +906,7 @@ export function useAdviserWorkload() {
         .filter(({ role }) => role === "adviser")
         .map(({ profile }) => profile);
 
-      const { data: assignments } = await supabase
-        .from("adviser_assignments")
+      const { data: assignments } = await crad.from("adviser_assignments")
         .select("adviser_id, research_id, research(title, status)");
 
       const workload = adviserProfiles.map((profile: any) => {
@@ -828,8 +926,7 @@ export function useAuditLogs() {
   return useQuery({
     queryKey: ["audit-logs"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("audit_logs")
+      const { data, error } = await crad.from("audit_logs")
         .select("*, profiles!user_id(full_name, email)")
         .order("created_at", { ascending: false })
         .limit(100);
@@ -845,7 +942,7 @@ export function useSystemSettings() {
   return useQuery({
     queryKey: ["system-settings"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("system_settings").select("*");
+      const { data, error } = await crad.from("system_settings").select("*");
       if (error) throw error;
       return data;
     },
@@ -858,8 +955,7 @@ export function useUpdateSetting() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      const { error } = await supabase
-        .from("system_settings")
+      const { error } = await crad.from("system_settings")
         .update({ value, updated_by: user!.id })
         .eq("key", key);
       if (error) throw error;
@@ -874,14 +970,12 @@ export function useAllUsers() {
     queryKey: ["all-users"],
     queryFn: async () => {
       // Fetch profiles and roles separately, then merge
-      const { data: profiles, error: pErr } = await supabase
-        .from("profiles")
+      const { data: profiles, error: pErr } = await crad.from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
       if (pErr) throw pErr;
 
-      const { data: roles, error: rErr } = await supabase
-        .from("user_roles")
+      const { data: roles, error: rErr } = await crad.from("user_roles")
         .select("user_id, role");
       if (rErr) throw rErr;
 
@@ -903,21 +997,18 @@ export function useUpdateUserRole() {
   return useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
       // Upsert the role
-      const { data: existing } = await supabase
-        .from("user_roles")
+      const { data: existing } = await crad.from("user_roles")
         .select("id")
         .eq("user_id", userId)
         .single();
 
       if (existing) {
-        const { error } = await supabase
-          .from("user_roles")
+        const { error } = await crad.from("user_roles")
           .update({ role: role as any })
           .eq("user_id", userId);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("user_roles")
+        const { error } = await crad.from("user_roles")
           .insert({ user_id: userId, role: role as any });
         if (error) throw error;
       }
@@ -940,7 +1031,7 @@ export function useDepartments() {
   return useQuery({
     queryKey: ["departments"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("departments").select("*").order("name");
+      const { data, error } = await crad.from("departments").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -952,7 +1043,7 @@ export function useResearchCategories() {
   return useQuery({
     queryKey: ["research-categories"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("research_categories").select("*").order("name");
+      const { data, error } = await crad.from("research_categories").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -968,10 +1059,10 @@ export function useDashboardStats(role: string) {
     queryFn: async () => {
       if (role === "student") {
         const [totalRes, pendingRes, approvedRes, unreadRes] = await Promise.all([
-          supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id),
-          supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).in("status", ["pending", "review"]),
-          supabase.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).eq("status", "approved"),
-          supabase.from("notifications").select("*", { count: "exact", head: true }).eq("user_id", user!.id).eq("is_read", false),
+          crad.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id),
+          crad.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).in("status", ["pending", "review"]),
+          crad.from("research").select("*", { count: "exact", head: true }).eq("submitted_by", user!.id).eq("status", "approved"),
+          crad.from("notifications").select("*", { count: "exact", head: true }).eq("user_id", user!.id).eq("is_read", false),
         ]);
         return {
           totalResearch: totalRes.count || 0,
@@ -981,28 +1072,28 @@ export function useDashboardStats(role: string) {
         };
       }
       if (role === "adviser") {
-        const { data: assignments } = await supabase.from("adviser_assignments").select("research_id").eq("adviser_id", user!.id);
+        const { data: assignments } = await crad.from("adviser_assignments").select("research_id").eq("adviser_id", user!.id);
         const ids = assignments?.map((a: any) => a.research_id) || [];
         if (ids.length === 0) return { assignedStudents: 0, pendingReviews: 0, approved: 0 };
         const [pendingRes, approvedRes] = await Promise.all([
-          supabase.from("research").select("*", { count: "exact", head: true }).in("id", ids).in("status", ["pending", "review"]),
-          supabase.from("research").select("*", { count: "exact", head: true }).in("id", ids).eq("status", "approved"),
+          crad.from("research").select("*", { count: "exact", head: true }).in("id", ids).in("status", ["pending", "review"]),
+          crad.from("research").select("*", { count: "exact", head: true }).in("id", ids).eq("status", "approved"),
         ]);
         return { assignedStudents: ids.length, pendingReviews: pendingRes.count || 0, approved: approvedRes.count || 0 };
       }
       if (role === "staff") {
         const [pendingPay, totalRes, defRes] = await Promise.all([
-          supabase.from("payments").select("*", { count: "exact", head: true }).in("status", ["pending", "submitted"]),
-          supabase.from("research").select("*", { count: "exact", head: true }),
-          supabase.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled"),
+          crad.from("payments").select("*", { count: "exact", head: true }).in("status", ["pending", "submitted"]),
+          crad.from("research").select("*", { count: "exact", head: true }),
+          crad.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled"),
         ]);
         return { pendingPayments: pendingPay.count || 0, totalResearch: totalRes.count || 0, defenseCount: defRes.count || 0 };
       }
       if (role === "admin") {
         const [usersRes, researchRes, defenseRes] = await Promise.all([
-          supabase.from("profiles").select("*", { count: "exact", head: true }),
-          supabase.from("research").select("*", { count: "exact", head: true }),
-          supabase.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled"),
+          crad.from("profiles").select("*", { count: "exact", head: true }),
+          crad.from("research").select("*", { count: "exact", head: true }),
+          crad.from("defense_schedules").select("*", { count: "exact", head: true }).eq("status", "scheduled"),
         ]);
         return { totalUsers: usersRes.count || 0, totalResearch: researchRes.count || 0, activeDefense: defenseRes.count || 0 };
       }
@@ -1013,13 +1104,192 @@ export function useDashboardStats(role: string) {
   });
 }
 
+export function useUpdateDefenseSchedule() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ defenseId, defense_date, defense_time, room, status }: {
+      defenseId: string;
+      defense_date: string;
+      defense_time: string;
+      room: string;
+      status: string;
+    }) => {
+      if (user?.isBypass) {
+        return { id: defenseId, defense_date, defense_time, room, status };
+      }
+
+      const { data, error } = await crad.from("defense_schedules")
+        .update({ defense_date, defense_time, room, status, updated_at: new Date().toISOString() })
+        .eq("id", defenseId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["defense-schedules"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    },
+  });
+}
+
+export function useAdminDashboardAnalytics() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["admin-dashboard-analytics", user?.id],
+    queryFn: async () => {
+      if (user?.isBypass) {
+        return getBypassAdminDashboardData();
+      }
+
+      const [
+        { count: totalUsers, error: usersCountError },
+        { data: roles, error: rolesError },
+        { data: research, error: researchError },
+        { data: manuscripts, error: manuscriptsError },
+        { data: payments, error: paymentsError },
+        { data: defenses, error: defensesError },
+        { data: finalApprovals, error: approvalsError },
+        { data: announcements, error: announcementsError },
+        { data: logs, error: logsError },
+      ] = await Promise.all([
+        crad.from("profiles").select("*", { count: "exact", head: true }),
+        crad.from("user_roles").select("role"),
+        crad.from("research")
+          .select("id, title, research_code, status, created_at, updated_at, departments(name, code), profiles!submitted_by(full_name)"),
+        crad.from("manuscripts")
+          .select("id, status, created_at, research(title, research_code), uploaded_by_profile:profiles!uploaded_by(full_name)")
+          .order("created_at", { ascending: false }),
+        crad.from("payments")
+          .select("id, payment_code, amount, status, created_at, research(title, research_code), submitted_by_profile:profiles!submitted_by(full_name)")
+          .order("created_at", { ascending: false }),
+        crad.from("defense_schedules")
+          .select("id, defense_date, defense_time, room, status, created_at, research(title, research_code)")
+          .order("defense_date", { ascending: true }),
+        crad.from("final_approvals")
+          .select("id, status, updated_at, created_at, research(title, research_code)")
+          .order("updated_at", { ascending: false }),
+        crad.from("announcements")
+          .select("id, title, is_pinned, created_at")
+          .order("created_at", { ascending: false }),
+        crad.from("audit_logs")
+          .select("id, action, details, created_at, profiles!user_id(full_name, email)")
+          .order("created_at", { ascending: false })
+          .limit(8),
+      ]);
+
+      if (usersCountError) throw usersCountError;
+      if (rolesError) throw rolesError;
+      if (researchError) throw researchError;
+      if (manuscriptsError) throw manuscriptsError;
+      if (paymentsError) throw paymentsError;
+      if (defensesError) throw defensesError;
+      if (approvalsError) throw approvalsError;
+      if (announcementsError) throw announcementsError;
+      if (logsError) throw logsError;
+
+      const roleCounts = (roles || []).reduce((acc: Record<string, number>, role: any) => {
+        acc[role.role] = (acc[role.role] || 0) + 1;
+        return acc;
+      }, {});
+
+      const researchStatusCounts = (research || []).reduce((acc: Record<string, number>, item: any) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const manuscriptStatusCounts = (manuscripts || []).reduce((acc: Record<string, number>, item: any) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const paymentStatusCounts = (payments || []).reduce((acc: Record<string, number>, item: any) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const defenseStatusCounts = (defenses || []).reduce((acc: Record<string, number>, item: any) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const approvalStatusCounts = (finalApprovals || []).reduce((acc: Record<string, number>, item: any) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const departmentRows = new Map<string, { department: string; code: string; totalResearch: number; activePipeline: number; archived: number }>();
+      (research || []).forEach((item: any) => {
+        const departmentName = item.departments?.name || "Unassigned";
+        const departmentCode = item.departments?.code || "N/A";
+        const row = departmentRows.get(departmentCode) || {
+          department: departmentName,
+          code: departmentCode,
+          totalResearch: 0,
+          activePipeline: 0,
+          archived: 0,
+        };
+        row.totalResearch += 1;
+        if (["archived", "completed"].includes(item.status)) row.archived += 1;
+        else row.activePipeline += 1;
+        departmentRows.set(departmentCode, row);
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const upcomingDefenses = (defenses || [])
+        .filter((item: any) => {
+          const defenseDate = new Date(item.defense_date);
+          return item.status === "scheduled" && defenseDate >= today;
+        })
+        .slice(0, 5);
+
+      return {
+        summary: {
+          totalUsers: totalUsers || 0,
+          totalResearch: research?.length || 0,
+          pendingResearch: (researchStatusCounts.pending || 0) + (researchStatusCounts.review || 0),
+          scheduledDefenses: defenseStatusCounts.scheduled || 0,
+          pendingPayments: (paymentStatusCounts.pending || 0) + (paymentStatusCounts.submitted || 0),
+          pendingFinalApprovals: approvalStatusCounts.pending || 0,
+          archivedResearch: researchStatusCounts.archived || 0,
+          totalAnnouncements: announcements?.length || 0,
+          pendingManuscripts: (manuscriptStatusCounts.submitted || 0) + (manuscriptStatusCounts.under_review || 0),
+        },
+        roleCounts,
+        researchStatusCounts,
+        manuscriptStatusCounts,
+        paymentStatusCounts,
+        defenseStatusCounts,
+        approvalStatusCounts,
+        departmentAnalytics: Array.from(departmentRows.values()).sort((a, b) => b.totalResearch - a.totalResearch),
+        recentResearch: (research || []).slice().sort((a: any, b: any) => +new Date(b.created_at) - +new Date(a.created_at)).slice(0, 6),
+        pendingPaymentsList: (payments || []).filter((item: any) => ["pending", "submitted"].includes(item.status)).slice(0, 6),
+        pendingApprovalsList: (finalApprovals || []).filter((item: any) => item.status === "pending").slice(0, 6),
+        upcomingDefenses,
+        recentLogs: logs || [],
+        recentAnnouncements: (announcements || []).slice(0, 5),
+        chartData: (research || []).map((item: any) => ({ status: item.status, created_at: item.created_at })),
+      };
+    },
+    enabled: !!user,
+    staleTime: 1000 * 30,
+    refetchOnWindowFocus: true,
+    retry: user?.isBypass ? false : 1,
+  });
+}
+
 // ==================== ARCHIVE (completed/archived research) ====================
 export function useArchivedResearch() {
   return useQuery({
     queryKey: ["archived-research"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("research")
+      const { data, error } = await crad.from("research")
         .select("*, profiles!submitted_by(full_name), research_members(member_name), departments(name, code)")
         .in("status", ["completed", "archived"])
         .order("updated_at", { ascending: false });
@@ -1035,8 +1305,7 @@ export function useResearchChartData() {
   return useQuery({
     queryKey: ["research-chart-data"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("research")
+      const { data, error } = await crad.from("research")
         .select("status, created_at")
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -1052,8 +1321,7 @@ export function useUserProfile() {
   return useQuery({
     queryKey: ["user-profile", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
+      const { data, error } = await crad.from("profiles")
         .select("*")
         .eq("user_id", user!.id)
         .single();
@@ -1072,8 +1340,7 @@ export function useUpdateUserProfile() {
     mutationFn: async ({ fullName, department, studentId }: {
       fullName?: string; department?: string; studentId?: string;
     }) => {
-      const { error } = await supabase
-        .from("profiles")
+      const { error } = await crad.from("profiles")
         .update({
           ...(fullName && { full_name: fullName }),
           ...(department !== undefined && { department }),
@@ -1095,8 +1362,7 @@ export function useUploadAvatar() {
   return useMutation({
     mutationFn: async (file: File) => {
       // Delete old avatar if exists
-      const { data: profile } = await supabase
-        .from("profiles")
+      const { data: profile } = await crad.from("profiles")
         .select("avatar_url")
         .eq("user_id", user!.id)
         .single();
@@ -1119,8 +1385,7 @@ export function useUploadAvatar() {
         .getPublicUrl(filePath);
 
       // Update profile with avatar URL
-      const { error: updateErr } = await supabase
-        .from("profiles")
+      const { error: updateErr } = await crad.from("profiles")
         .update({ avatar_url: publicUrl.publicUrl, updated_at: new Date().toISOString() })
         .eq("user_id", user!.id);
       if (updateErr) throw updateErr;
@@ -1138,8 +1403,7 @@ export function useDefenseGrades(researchId?: string, defenseId?: string) {
   return useQuery({
     queryKey: ["defense-grades", researchId, defenseId],
     queryFn: async () => {
-      let query = supabase
-        .from("defense_grades")
+      let query = crad.from("defense_grades")
         .select("*, profiles!panelist_id(full_name)");
       
       if (researchId) query = query.eq("research_id", researchId);
@@ -1163,8 +1427,7 @@ export function useSubmitDefenseGrade() {
     mutationFn: async ({ defenseId, researchId, grade, remarks }: {
       defenseId: string; researchId: string; grade: number; remarks?: string;
     }) => {
-      const { data, error } = await supabase
-        .from("defense_grades")
+      const { data, error } = await crad.from("defense_grades")
         .insert({
           defense_id: defenseId,
           research_id: researchId,
@@ -1191,8 +1454,7 @@ export function useUpdateDefenseGrade() {
     mutationFn: async ({ gradeId, grade, remarks }: {
       gradeId: string; grade: number; remarks?: string;
     }) => {
-      const { error } = await supabase
-        .from("defense_grades")
+      const { error } = await crad.from("defense_grades")
         .update({
           grade,
           remarks: remarks || null,
@@ -1212,8 +1474,7 @@ export function usePendingFinalApprovals() {
   return useQuery({
     queryKey: ["pending-final-approvals"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("final_approvals")
+      const { data, error } = await crad.from("final_approvals")
         .select("*, research(id, title, research_code, submitted_by, defense_schedules(id, status, defense_date, updated_at), research_members(member_name, is_leader), profiles!submitted_by(full_name))")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
@@ -1223,8 +1484,7 @@ export function usePendingFinalApprovals() {
       const researchIds = approvals.map((a: any) => a.research_id).filter(Boolean);
       if (researchIds.length === 0) return approvals;
 
-      const { data: grades, error: gradesError } = await supabase
-        .from("defense_grades")
+      const { data: grades, error: gradesError } = await crad.from("defense_grades")
         .select("*, profiles!panelist_id(full_name)")
         .in("research_id", researchIds);
       if (gradesError) throw gradesError;
@@ -1250,8 +1510,7 @@ export function useFinalApprovalsWithGrades() {
   return useQuery({
     queryKey: ["final-approvals-with-grades"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("final_approvals")
+      const { data, error } = await crad.from("final_approvals")
         .select("*, research(id, title, research_code, submitted_by, defense_schedules!inner(id), research_members(member_name, is_leader), profiles!submitted_by(full_name))")
         .neq("status", "pending")
         .order("updated_at", { ascending: false });
@@ -1260,8 +1519,7 @@ export function useFinalApprovalsWithGrades() {
       // Fetch defense grades for each
       const enriched = await Promise.all(
         (data || []).map(async (approval: any) => {
-          const { data: grades, error: gradesError } = await supabase
-            .from("defense_grades")
+          const { data: grades, error: gradesError } = await crad.from("defense_grades")
             .select("*, profiles!panelist_id(full_name)")
             .eq("research_id", approval.research_id);
           if (gradesError) {
@@ -1282,8 +1540,7 @@ export function useResearchFinalApproval(researchId?: string) {
   return useQuery({
     queryKey: ["research-final-approval", researchId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("final_approvals")
+      const { data, error } = await crad.from("final_approvals")
         .select("*, approved_by_profile:profiles!approved_by(full_name)")
         .eq("research_id", researchId!)
         .single();
@@ -1302,8 +1559,7 @@ export function useUpdateFinalApproval() {
     mutationFn: async ({ researchId, status, remarks }: {
       researchId: string; status: "approved" | "rejected" | "revision_requested"; remarks?: string;
     }) => {
-      const { error } = await supabase
-        .from("final_approvals")
+      const { error } = await crad.from("final_approvals")
         .update({
           status,
           remarks: remarks || null,
@@ -1314,8 +1570,7 @@ export function useUpdateFinalApproval() {
       if (error) throw error;
 
       // Fetch submitter info for notification
-      const { data: research } = await supabase
-        .from("research")
+      const { data: research } = await crad.from("research")
         .select("submitted_by, title")
         .eq("id", researchId)
         .single();
