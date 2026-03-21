@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Award, CheckCircle2, Eye, User } from "lucide-react";
+import { Award, Building2, CalendarDays, CheckCircle2, Copy, Eye, User } from "lucide-react";
 import { format } from "date-fns";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import { useArchivedResearch } from "@/shared/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { DataTableToolbar } from "@/shared/components/DataTableToolbar";
 import { EmptyTableState } from "@/shared/components/EmptyTableState";
+import { useSnackbar } from "@/shared/components/SnackbarProvider";
+import { Button } from "@/components/ui/button";
 
 export const ArchivePage: React.FC = () => {
+  const crad = supabase.schema("crad") as any;
+  const { show } = useSnackbar();
   const { data: archived, isLoading } = useArchivedResearch();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -31,6 +35,7 @@ export const ArchivePage: React.FC = () => {
     const fetchApprovalData = async () => {
       try {
         const { data: approval, error: approvalErr } = await supabase
+          .schema("crad")
           .from("final_approvals")
           .select("*, approved_by_profile:profiles!approved_by(full_name)")
           .eq("research_id", expandedId)
@@ -41,7 +46,7 @@ export const ArchivePage: React.FC = () => {
           return;
         }
 
-        const { data: grades, error: gradesErr } = await supabase
+        const { data: grades, error: gradesErr } = await crad
           .from("defense_grades")
           .select("*, profiles!panelist_id(full_name)")
           .eq("research_id", expandedId);
@@ -64,6 +69,19 @@ export const ArchivePage: React.FC = () => {
   }, [approvalData, expandedId]);
 
   const statuses = Array.from(new Set((archived || []).map((research: any) => research.status).filter(Boolean)));
+  const archiveAverage = useMemo(() => {
+    const gradeAverages = Object.values(approvalData)
+      .map((entry: any) => {
+        const grades = entry?.grades || [];
+        if (!grades.length) return null;
+        return grades.reduce((sum: number, grade: any) => sum + Number(grade.grade), 0) / grades.length;
+      })
+      .filter((value): value is number => value !== null);
+
+    if (!gradeAverages.length) return null;
+    return gradeAverages.reduce((sum, value) => sum + value, 0) / gradeAverages.length;
+  }, [approvalData]);
+  const departmentCount = Array.from(new Set((archived || []).map((research: any) => research.departments?.code).filter(Boolean))).length;
 
   if (isLoading) {
     return <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="h-16 rounded-xl skeleton-shimmer" />)}</div>;
@@ -88,11 +106,25 @@ export const ArchivePage: React.FC = () => {
         ]}
         stats={[
           <div key="count" className="rounded-lg border border-border bg-card px-3 py-2">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Archived</p>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Records</p>
             <p className="text-lg font-bold text-foreground">{archived?.length || 0}</p>
+          </div>,
+          <div key="departments" className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Departments</p>
+            <p className="text-lg font-bold text-foreground">{departmentCount}</p>
+          </div>,
+          <div key="average" className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Avg. Defense Grade</p>
+            <p className="text-lg font-bold text-foreground">{archiveAverage !== null ? archiveAverage.toFixed(1) : "N/A"}</p>
           </div>,
         ]}
       />
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ArchiveSummaryCard title="Repository Scope" value={`${archived?.length || 0} records`} note="Completed and archived research records tracked by CRAD." icon={<CheckCircle2 className="h-4 w-4 text-primary" />} />
+        <ArchiveSummaryCard title="Department Coverage" value={`${departmentCount || 0} active groups`} note="Research represented across archived and completed records." icon={<Building2 className="h-4 w-4 text-primary" />} />
+        <ArchiveSummaryCard title="Quality Snapshot" value={archiveAverage !== null ? `${archiveAverage.toFixed(1)} / 100` : "Pending"} note="Average defense score based on archived grade evidence already loaded." icon={<Award className="h-4 w-4 text-primary" />} />
+      </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -137,7 +169,35 @@ export const ArchivePage: React.FC = () => {
                     {expandedId === research.id ? (
                       <tr className="border-t border-border/40 bg-muted/20">
                         <td colSpan={6} className="px-4 py-4">
-                          <ArchiveDetails research={research} data={approvalData[research.id]} />
+                          <ArchiveDetails
+                            research={research}
+                            data={approvalData[research.id]}
+                            onCopySummary={async () => {
+                              const gradeRows = approvalData[research.id]?.grades || [];
+                              const approval = approvalData[research.id]?.approval;
+                              const average =
+                                gradeRows.length > 0
+                                  ? gradeRows.reduce((sum: number, grade: any) => sum + Number(grade.grade), 0) / gradeRows.length
+                                  : null;
+                              const summary = [
+                                `Research: ${research.title}`,
+                                `Code: ${research.research_code || "N/A"}`,
+                                `Leader: ${research.profiles?.full_name || "Unknown"}`,
+                                `Department: ${research.departments?.name || "Not set"}`,
+                                `Archive Status: ${research.status}`,
+                                `Defense Average: ${average !== null ? `${average.toFixed(1)} / 100` : "Not available"}`,
+                                `Approval Status: ${approval?.status || "Not recorded"}`,
+                                `Approval Remarks: ${approval?.remarks || "No approval remarks recorded"}`,
+                              ].join("\n");
+
+                              try {
+                                await navigator.clipboard.writeText(summary);
+                                show("Archive summary copied.", "success");
+                              } catch {
+                                show("Unable to copy archive summary.", "error");
+                              }
+                            }}
+                          />
                         </td>
                       </tr>
                     ) : null}
@@ -152,7 +212,7 @@ export const ArchivePage: React.FC = () => {
   );
 };
 
-const ArchiveDetails: React.FC<{ research: any; data?: { approval?: any; grades?: any[] } }> = ({ research, data }) => {
+const ArchiveDetails: React.FC<{ research: any; data?: { approval?: any; grades?: any[] }; onCopySummary: () => void }> = ({ research, data, onCopySummary }) => {
   const approval = data?.approval;
   const grades = data?.grades || [];
   const averageGrade =
@@ -160,6 +220,31 @@ const ArchiveDetails: React.FC<{ research: any; data?: { approval?: any; grades?
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-3 xl:grid-cols-[0.8fr_1.2fr]">
+        <div className="rounded-2xl border border-border bg-background p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Archive Record Sheet</p>
+            <Button variant="outline" size="sm" onClick={onCopySummary} className="gap-1.5">
+              <Copy size={13} />
+              Copy Brief
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <InfoLine label="Research Code" value={research.research_code || "Not recorded"} />
+            <InfoLine label="Leader" value={research.profiles?.full_name || "Unknown"} icon={<User size={12} />} />
+            <InfoLine label="Department" value={research.departments?.name || "Not set"} icon={<Building2 size={12} />} />
+            <InfoLine label="Archived On" value={format(new Date(research.updated_at || research.created_at), "MMM d, yyyy")} icon={<CalendarDays size={12} />} />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-muted/20 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Research Abstract Snapshot</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {research.abstract || "No abstract was stored for this archive record."}
+          </p>
+        </div>
+      </div>
+
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Group Members</p>
         <div className="flex flex-wrap gap-2">
@@ -221,5 +306,28 @@ const InfoLine = ({ label, value, icon }: { label: string; value: string; icon?:
       {label}
     </p>
     <p className="mt-2 text-sm font-medium capitalize text-foreground">{value}</p>
+  </div>
+);
+
+const ArchiveSummaryCard = ({
+  title,
+  value,
+  note,
+  icon,
+}: {
+  title: string;
+  value: string;
+  note: string;
+  icon: React.ReactNode;
+}) => (
+  <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+        <p className="mt-2 text-xl font-bold text-foreground">{value}</p>
+      </div>
+      {icon}
+    </div>
+    <p className="mt-3 text-sm text-muted-foreground">{note}</p>
   </div>
 );

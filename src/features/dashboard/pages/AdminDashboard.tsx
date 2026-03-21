@@ -2,6 +2,7 @@ import React from "react";
 import { format } from "date-fns";
 import {
   Activity,
+  ArrowRight,
   Archive,
   BellRing,
   BookOpen,
@@ -14,6 +15,7 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -35,6 +37,7 @@ import { StatusBadge } from "@/shared/components/StatusBadge";
 const PIE_COLORS = ["#0f766e", "#2563eb", "#d97706", "#16a34a", "#dc2626", "#7c3aed", "#475569"];
 
 export const AdminDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const { data, isLoading, isError, error } = useAdminDashboardAnalytics();
 
   if (isLoading) {
@@ -138,6 +141,37 @@ export const AdminDashboard: React.FC = () => {
     { label: "Archived Research", value: summary.archivedResearch, icon: <Archive size={18} />, tone: "text-slate-700 bg-slate-50 border-slate-200" },
   ];
 
+  const quickActions = [
+    {
+      label: "Review Final Approvals",
+      helper: "Clear defended research waiting for a CRAD decision.",
+      value: `${summary.pendingFinalApprovals} pending`,
+      path: "/admin/final-approvals",
+      icon: <ShieldCheck size={16} className="text-orange-600" />,
+    },
+    {
+      label: "Manage Defense Schedule",
+      helper: "Create or update upcoming defense sessions and rooms.",
+      value: `${summary.scheduledDefenses} scheduled`,
+      path: "/defense",
+      icon: <Calendar size={16} className="text-emerald-600" />,
+    },
+    {
+      label: "Publish Announcement",
+      helper: "Post institute-wide notices for students, advisers, and staff.",
+      value: `${summary.totalAnnouncements} live notices`,
+      path: "/announcements",
+      icon: <BellRing size={16} className="text-primary" />,
+    },
+    {
+      label: "Open Archive",
+      helper: "Inspect completed records and archive-ready summaries.",
+      value: `${summary.archivedResearch} archived`,
+      path: "/archive",
+      icon: <Archive size={16} className="text-slate-600" />,
+    },
+  ];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -171,6 +205,32 @@ export const AdminDashboard: React.FC = () => {
             <p className="mt-4 text-3xl font-bold">{card.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">CRAD Action Center</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Jump directly into the live modules that need action from CRAD administration.
+          </p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {quickActions.map((action) => (
+            <button
+              key={action.label}
+              onClick={() => navigate(action.path)}
+              className="rounded-2xl border border-border bg-background p-4 text-left transition-colors hover:bg-muted/40"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="rounded-xl bg-muted/50 p-2">{action.icon}</div>
+                <ArrowRight size={16} className="text-muted-foreground" />
+              </div>
+              <p className="mt-4 text-sm font-semibold text-foreground">{action.label}</p>
+              <p className="mt-1 text-xs font-medium text-primary">{action.value}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{action.helper}</p>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
