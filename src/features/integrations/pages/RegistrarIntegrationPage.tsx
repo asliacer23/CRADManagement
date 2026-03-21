@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getCradCashierEvents, getCradCashierLinks, getCradFlowProfile, getCradIntegrationAuditLogs, getCradProgramActivityReport, getCradRecentClearanceRecords, saveCradGuidanceRecommendation } from "@/features/integrations/services/registrarIntegrationService";
+import { buildCradProgramActivityReport, getCradCashierEvents, getCradCashierLinks, getCradFlowProfile, getCradIntegrationAuditLogs, getCradProgramActivityReport, getCradRecentClearanceRecords, saveCradGuidanceRecommendation } from "@/features/integrations/services/registrarIntegrationService";
 import { supabase } from "@/integrations/supabase/client";
 
 const STORAGE_KEYS = {
@@ -66,6 +66,7 @@ export function RegistrarIntegrationPage() {
   const [recommendationLogs, setRecommendationLogs] = useState<any[]>([]);
   const [cashierLinks, setCashierLinks] = useState<any[]>([]);
   const [cashierEvents, setCashierEvents] = useState<any[]>([]);
+  const [pmedReportPreview, setPmedReportPreview] = useState<any | null>(null);
 
   useEffect(() => {
     const storedBaseUrl = window.localStorage.getItem(STORAGE_KEYS.baseUrl);
@@ -92,8 +93,9 @@ export function RegistrarIntegrationPage() {
       getCradIntegrationAuditLogs("student_recommendation", 5),
       getCradCashierLinks(),
       getCradCashierEvents(),
+      getCradProgramActivityReport().catch(() => null),
     ])
-      .then(([profile, records, studentLogs, recommendations, links, events]) => {
+      .then(([profile, records, studentLogs, recommendations, links, events, pmedReport]) => {
         if (!mounted) return;
         if (profile) {
           setFlowSummary(
@@ -113,6 +115,7 @@ export function RegistrarIntegrationPage() {
         setRecommendationLogs(recommendations);
         setCashierLinks(links);
         setCashierEvents(events);
+        setPmedReportPreview(pmedReport?.data ?? pmedReport ?? null);
       })
       .catch((error) => {
         if (!mounted) return;
@@ -124,6 +127,7 @@ export function RegistrarIntegrationPage() {
         setRecommendationLogs([]);
         setCashierLinks([]);
         setCashierEvents([]);
+        setPmedReportPreview(null);
       });
 
     return () => {
@@ -167,8 +171,22 @@ export function RegistrarIntegrationPage() {
   async function loadProgramReport(label: string) {
     setBusyAction(label);
     try {
-      const payload = await getCradProgramActivityReport();
-      setResponseText(JSON.stringify(payload, null, 2));
+      const payload = await buildCradProgramActivityReport();
+      const report = payload?.data ?? payload ?? null;
+      setPmedReportPreview(report);
+      setResponseText(
+        JSON.stringify(
+          {
+            ok: true,
+            message: "PMED report was stored in the database.",
+            batch_id: report?.batch_id,
+            generated_at: report?.generated_at,
+            row_count: report?.row_count ?? report?.rows?.length ?? 0,
+          },
+          null,
+          2
+        )
+      );
     } catch (error) {
       setResponseText(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : "Request failed." }, null, 2));
     } finally {
@@ -618,21 +636,76 @@ export function RegistrarIntegrationPage() {
                   <FileText className="h-4 w-4 text-emerald-700" />
                   PMED Reporting
                 </CardTitle>
-                <CardDescription>Generate outbound program activity reports for PMED straight from the Supabase function layer.</CardDescription>
+                <CardDescription>Build and save outbound program activity reports for PMED from the live CRAD database.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                   <p className="text-sm font-semibold text-emerald-800">Outgoing payload</p>
                   <p className="mt-2 text-sm leading-6 text-emerald-700">
-                    The PMED integration compiles research, manuscripts, payments, defenses, announcements, and audit signals into a reporting payload.
+                    The PMED integration compiles research, manuscripts, payments, defenses, announcements, and audit signals, then stores the latest batch in the database.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button onClick={() => loadProgramReport("program-report")} disabled={busyAction !== ""}>
                     <Activity className="h-4 w-4" />
-                    {busyAction === "program-report" ? "Building..." : "Load PMED Report"}
+                    {busyAction === "program-report" ? "Building..." : "Build + Load PMED Report"}
                   </Button>
                 </div>
+                {pmedReportPreview ? (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Batch</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900">{pmedReportPreview.batch_id || "Latest batch"}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Generated</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900">
+                          {pmedReportPreview.generated_at ? format(new Date(pmedReportPreview.generated_at), "MMM d, yyyy h:mm a") : "Not available"}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Rows Stored</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900">{pmedReportPreview.row_count ?? pmedReportPreview.rows?.length ?? 0}</p>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-500">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold">Section</th>
+                            <th className="px-4 py-3 text-left font-semibold">Reference</th>
+                            <th className="px-4 py-3 text-left font-semibold">Title</th>
+                            <th className="px-4 py-3 text-left font-semibold">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(pmedReportPreview.rows || []).slice(0, 5).map((row: any, index: number) => (
+                            <tr key={`${row.batch_id || pmedReportPreview.batch_id}-${row.section}-${row.row_index || index}`} className="border-t border-slate-200">
+                              <td className="px-4 py-3 text-slate-600 capitalize">{String(row.section || "").replace(/-/g, " ")}</td>
+                              <td className="px-4 py-3 font-medium text-slate-900">{row.reference_code || "N/A"}</td>
+                              <td className="px-4 py-3 text-slate-600">{row.title || "Untitled"}</td>
+                              <td className="px-4 py-3 text-slate-600 capitalize">{String(row.status || "n/a").replace(/_/g, " ")}</td>
+                            </tr>
+                          ))}
+                          {!(pmedReportPreview.rows || []).length ? (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
+                                No stored PMED rows yet.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <Link to="/integrations/pmed/reports" className="inline-flex items-center gap-2 text-sm font-medium text-sky-700 underline-offset-4 hover:underline">
+                      Open full PMED report table
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </div>

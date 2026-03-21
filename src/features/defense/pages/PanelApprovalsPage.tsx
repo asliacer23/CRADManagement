@@ -59,7 +59,7 @@ function getBypassPanelApprovals(userId: string) {
 
 export const PanelApprovalsPage: React.FC = () => {
   const { user } = useAuth();
-  const crad = supabase.schema("crad") as any;
+  const db = supabase as any;
   const [defenses, setDefenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -113,8 +113,7 @@ export const PanelApprovalsPage: React.FC = () => {
           return;
         }
 
-        const { data: panelData, error: panelErr } = await supabase
-          .schema("crad")
+        const { data: panelData, error: panelErr } = await db
           .from("defense_panel_members")
           .select("defense_id, role")
           .eq("panelist_id", user.id);
@@ -135,8 +134,7 @@ export const PanelApprovalsPage: React.FC = () => {
 
         const defenseIds = panelData.map((panel: any) => panel.defense_id);
 
-        const { data: defensesData, error: defensesErr } = await supabase
-          .schema("crad")
+        const { data: defensesData, error: defensesErr } = await db
           .from("defense_schedules")
           .select("*")
           .in("id", defenseIds)
@@ -153,11 +151,11 @@ export const PanelApprovalsPage: React.FC = () => {
         const researchIds = Array.from(new Set((defensesData || []).map((defense: any) => defense.research_id).filter(Boolean)));
 
         const [{ data: researchData, error: researchErr }, { data: panelMembersData, error: panelMembersErr }] = await Promise.all([
-          crad
+          db
             .from("research")
             .select("id, title, research_code, submitted_by, research_members(member_name, is_leader), profiles!submitted_by(full_name)")
             .in("id", researchIds),
-          crad
+          db
             .from("defense_panel_members")
             .select("defense_id, panelist_id, role, profiles!panelist_id(full_name)")
             .in("defense_id", defenseIds),
@@ -176,8 +174,7 @@ export const PanelApprovalsPage: React.FC = () => {
 
         const enriched = await Promise.all(
           (defensesData || []).map(async (defense: any) => {
-            const { data: grades, error: gradesErr } = await supabase
-              .schema("crad")
+            const { data: grades, error: gradesErr } = await db
               .from("defense_grades")
               .select("*, profiles!panelist_id(full_name)")
               .eq("defense_id", defense.id);
@@ -236,8 +233,7 @@ export const PanelApprovalsPage: React.FC = () => {
 
       const noteContent = `Panel Leader Decision: ${decision.toUpperCase()}\nRemarks: ${remarks[defenseId] || "No remarks provided"}\nDecision Date: ${new Date().toISOString()}`;
 
-      const { error } = await supabase
-        .schema("crad")
+      const { error } = await db
         .from("defense_schedules")
         .update({ notes: noteContent })
         .eq("id", defenseId);

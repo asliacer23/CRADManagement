@@ -1,10 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const crad = supabase.schema("crad") as any;
+const cradViews = supabase.schema("crad") as any;
 const publicDb = supabase as any;
 
 export async function getCradFlowProfile() {
-  const { data, error } = await crad
+  const { data, error } = await cradViews
     .from("department_flow_profiles")
     .select("*")
     .eq("department_key", "crad")
@@ -15,7 +15,7 @@ export async function getCradFlowProfile() {
 }
 
 export async function getCradRecentClearanceRecords() {
-  const { data, error } = await crad
+  const { data, error } = await cradViews
     .from("department_clearance_records")
     .select("*")
     .eq("department_key", "crad")
@@ -27,7 +27,7 @@ export async function getCradRecentClearanceRecords() {
 }
 
 export async function getCradCashierLinks() {
-  const { data, error } = await crad
+  const { data, error } = await cradViews
     .from("cashier_payment_links")
     .select("*")
     .order("created_at", { ascending: false })
@@ -38,7 +38,7 @@ export async function getCradCashierLinks() {
 }
 
 export async function getCradCashierEvents() {
-  const { data, error } = await crad
+  const { data, error } = await cradViews
     .from("cashier_integration_events")
     .select("*")
     .order("created_at", { ascending: false })
@@ -49,7 +49,7 @@ export async function getCradCashierEvents() {
 }
 
 export async function getCradIntegrationAuditLogs(entityType: string, limit = 20) {
-  const { data, error } = await crad
+  const { data, error } = await publicDb
     .from("audit_logs")
     .select("id, action, details, entity_id, entity_type, created_at")
     .eq("entity_type", entityType)
@@ -63,17 +63,6 @@ export async function getCradIntegrationAuditLogs(entityType: string, limit = 20
 export async function getCradRegistrarStudentFeed(limit = 200) {
   const selectClause = "id, batch_id, source, target_key, target_label, row_index, student_no, student_name, program, year_level, status, payload, sent_at, created_at";
 
-  const cradResult = await crad
-    .from("registrar_student_list_feed")
-    .select(selectClause)
-    .order("sent_at", { ascending: false })
-    .order("row_index", { ascending: true })
-    .limit(limit);
-
-  if (!cradResult.error) {
-    return cradResult.data ?? [];
-  }
-
   const publicResult = await publicDb
     .from("crad_registrar_student_list_feed")
     .select(selectClause)
@@ -85,12 +74,7 @@ export async function getCradRegistrarStudentFeed(limit = 200) {
     return publicResult.data ?? [];
   }
 
-  throw new Error(
-    [
-      cradResult.error.message,
-      publicResult.error.message
-    ].filter(Boolean).join(" | ") || "Failed to load registrar student feed."
-  );
+  throw publicResult.error;
 }
 
 export async function saveCradGuidanceRecommendation(input: {
@@ -114,7 +98,7 @@ export async function saveCradGuidanceRecommendation(input: {
     reference_no: String(input.reference_no ?? "").trim(),
   };
 
-  const { data: staffRoles, error: roleError } = await crad.from("user_roles").select("user_id").in("role", ["staff", "admin"]);
+  const { data: staffRoles, error: roleError } = await publicDb.from("user_roles").select("user_id").in("role", ["staff", "admin"]);
   if (roleError) throw roleError;
 
   if (staffRoles?.length) {
@@ -127,11 +111,11 @@ export async function saveCradGuidanceRecommendation(input: {
       reference_type: "student_recommendation",
     }));
 
-    const { error: notificationError } = await crad.from("notifications").insert(notifications);
+    const { error: notificationError } = await publicDb.from("notifications").insert(notifications);
     if (notificationError) throw notificationError;
   }
 
-  const { error } = await crad.from("audit_logs").insert({
+  const { error } = await publicDb.from("audit_logs").insert({
     action: "STUDENT_RECOMMENDATION_RECEIVED",
     details: JSON.stringify(recommendation),
     entity_id: null,
@@ -143,33 +127,28 @@ export async function saveCradGuidanceRecommendation(input: {
 }
 
 export async function getCradProgramActivityReport() {
-  const [researchCount, manuscriptCount, paymentCount, defenseCount, announcementCount, latestResearch] = await Promise.all([
-    crad.from("research").select("*", { count: "exact", head: true }),
-    crad.from("manuscripts").select("*", { count: "exact", head: true }),
-    crad.from("payments").select("*", { count: "exact", head: true }),
-    crad.from("defense_schedules").select("*", { count: "exact", head: true }),
-    crad.from("announcements").select("*", { count: "exact", head: true }),
-    crad.from("research").select("id, title, research_code, status, created_at").order("created_at", { ascending: false }).limit(10),
-  ]);
+  const response = await fetch("/api/pmed-reports");
+  const payload = await response.json().catch(() => ({}));
 
-  const queries = [researchCount, manuscriptCount, paymentCount, defenseCount, announcementCount, latestResearch];
-  const failedQuery = queries.find((query) => query.error);
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(payload?.error || "Failed to load PMED report.");
+  }
 
-  if (failedQuery?.error) throw failedQuery.error;
+  return payload;
+}
 
-  return {
-    ok: true,
-    data: {
-      generated_at: new Date().toISOString(),
-      source: "CRADManagement",
-      overview: {
-        total_research: researchCount.count ?? 0,
-        total_manuscripts: manuscriptCount.count ?? 0,
-        total_payments: paymentCount.count ?? 0,
-        total_defense_schedules: defenseCount.count ?? 0,
-        total_announcements: announcementCount.count ?? 0,
-      },
-      recent_research: latestResearch.data ?? [],
+export async function buildCradProgramActivityReport() {
+  const response = await fetch("/api/pmed-reports", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
-  };
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(payload?.error || "Failed to build PMED report.");
+  }
+
+  return payload;
 }

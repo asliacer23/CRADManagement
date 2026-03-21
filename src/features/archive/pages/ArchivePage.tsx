@@ -10,7 +10,7 @@ import { useSnackbar } from "@/shared/components/SnackbarProvider";
 import { Button } from "@/components/ui/button";
 
 export const ArchivePage: React.FC = () => {
-  const crad = supabase.schema("crad") as any;
+  const db = supabase as any;
   const { show } = useSnackbar();
   const { data: archived, isLoading } = useArchivedResearch();
   const [search, setSearch] = useState("");
@@ -35,7 +35,6 @@ export const ArchivePage: React.FC = () => {
     const fetchApprovalData = async () => {
       try {
         const { data: approval, error: approvalErr } = await supabase
-          .schema("crad")
           .from("final_approvals")
           .select("*, approved_by_profile:profiles!approved_by(full_name)")
           .eq("research_id", expandedId)
@@ -46,7 +45,7 @@ export const ArchivePage: React.FC = () => {
           return;
         }
 
-        const { data: grades, error: gradesErr } = await crad
+        const { data: grades, error: gradesErr } = await db
           .from("defense_grades")
           .select("*, profiles!panelist_id(full_name)")
           .eq("research_id", expandedId);

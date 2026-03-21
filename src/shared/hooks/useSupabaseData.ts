@@ -3,8 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "./useAuth";
 
-const crad = supabase.schema("crad") as any;
 const publicDb = supabase as any;
+const crad = publicDb;
 
 function getBypassAdminDashboardData() {
   return {
