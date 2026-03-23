@@ -36,6 +36,7 @@ import {
   Upload,
   User,
   UserCheck,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -72,6 +73,7 @@ const navItems: NavItem[] = [
   { section: "Coordination", label: "Announcements", path: "/announcements", icon: <Megaphone size={18} />, roles: ["staff", "admin"] },
   { section: "Coordination", label: "Integration Hub", path: "/integrations", icon: <GitBranch size={18} />, roles: ["staff", "admin"], exact: true },
   { section: "Coordination", label: "Student List", path: "/integrations/student-list", icon: <Users size={18} />, roles: ["staff", "admin"], exact: true },
+  { section: "Coordination", label: "Request Staff from HR", path: "/integrations/hr-staff-request", icon: <UserPlus size={18} />, roles: ["staff", "admin"], exact: true },
   { section: "Administration", label: "Manage Users", path: "/admin/users", icon: <Users size={18} />, roles: ["admin"] },
   { section: "Administration", label: "All Research", path: "/admin/research", icon: <BookOpen size={18} />, roles: ["admin"] },
   { section: "Administration", label: "System Settings", path: "/admin/settings", icon: <Settings size={18} />, roles: ["admin"] },

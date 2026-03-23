@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import {
   Activity,
@@ -12,8 +13,10 @@ import {
   ShieldCheck,
   Sparkles,
   UserCog,
+  UserPlus,
   Users,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Bar,
   BarChart,
@@ -148,6 +151,14 @@ export const AdminDashboard: React.FC = () => {
           <p className="text-sm text-muted-foreground mt-1">
             Live analytics across users, research, manuscripts, payments, defenses, approvals, and announcements.
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" className="font-semibold">
+              <Link to="/integrations/hr-staff-request">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Request staff from HR
+              </Link>
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:w-auto">
           <div className="rounded-xl border border-border bg-card px-4 py-3">

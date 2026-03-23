@@ -1,9 +1,11 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useDashboardStats, usePendingPayments } from "@/shared/hooks/useSupabaseData";
 import { StatSkeleton } from "@/shared/components/Skeletons";
 import { StatusBadge } from "@/shared/components/StatusBadge";
-import { CreditCard, Calendar, Users, Archive } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CreditCard, Calendar, UserPlus, Users, Archive } from "lucide-react";
 
 export const StaffDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -34,6 +36,14 @@ export const StaffDashboard: React.FC = () => {
       <div>
         <h1 className="text-xl lg:text-2xl font-bold text-foreground">Staff Dashboard 🗂️</h1>
         <p className="text-sm text-muted-foreground">Manage payments, schedules, and assignments</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm" className="font-semibold">
+            <Link to="/integrations/hr-staff-request">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Request staff from HR
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
