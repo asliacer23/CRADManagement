@@ -2,6 +2,65 @@ import { supabase } from "@/integrations/supabase/client";
 
 const db = supabase as any;
 
+// ---------------------------------------------------------------------------
+// Cashier student billing detection.
+// Served by the Vite dev-server plugin at /api/cashier-student-billing.
+// Queries the shared Supabase database directly — no cashier API server needed.
+// ---------------------------------------------------------------------------
+
+export interface CashierResearchPaymentItem {
+  billingId: number;
+  billingCode: string;
+  semester: string;
+  schoolYear: string;
+  billingStatus: string;
+  totalAmount: number;
+  totalAmountFormatted: string;
+  paidAmount: number;
+  paidAmountFormatted: string;
+  balanceAmount: number;
+  balanceAmountFormatted: string;
+  downpaymentRequired: number;
+  downpaymentRequiredFormatted: string;
+  studentNo: string;
+  studentName: string;
+  course: string;
+  yearLevel: string;
+  /** 'full_paid' | 'downpayment' | 'partial' | 'unpaid' */
+  paymentType: "full_paid" | "downpayment" | "partial" | "unpaid";
+  isPaid: boolean;
+  isDownpayment: boolean;
+  isPartial: boolean;
+  paymentMethods: string;
+  receiptNumbers: string;
+  lastPaymentDate: string | null;
+  billingCreatedAt: string | null;
+}
+
+export interface CashierResearchPaymentsResponse {
+  stats: { title: string; value: string; subtitle: string }[];
+  items: CashierResearchPaymentItem[];
+  byStudentNo: Record<string, CashierResearchPaymentItem>;
+}
+
+export async function getCashierResearchPayments(): Promise<CashierResearchPaymentsResponse> {
+  const res = await fetch("/api/cashier-student-billing", {
+    headers: { "Accept": "application/json" },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Cashier billing lookup failed (${res.status}): ${text}`);
+  }
+
+  const payload = await res.json();
+  return {
+    stats:       payload?.data?.stats       ?? [],
+    items:       Object.values(payload?.data?.byStudentNo ?? {}),
+    byStudentNo: payload?.data?.byStudentNo ?? {},
+  };
+}
+
 export async function getCradFlowProfile() {
   const { data, error } = await db
     .from("crad_department_flow_profiles")
@@ -48,7 +107,7 @@ export async function getCradCashierEvents() {
 }
 
 export async function getCradIntegrationAuditLogs(entityType: string, limit = 20) {
-  const { data, error } = await publicDb
+  const { data, error } = await db
     .from("audit_logs")
     .select("id, action, details, entity_id, entity_type, created_at")
     .eq("entity_type", entityType)
@@ -62,18 +121,15 @@ export async function getCradIntegrationAuditLogs(entityType: string, limit = 20
 export async function getCradRegistrarStudentFeed(limit = 200) {
   const selectClause = "id, batch_id, source, target_key, target_label, row_index, student_no, student_name, program, year_level, status, payload, sent_at, created_at";
 
-  const publicResult = await publicDb
+  const { data, error } = await db
     .from("crad_registrar_student_list_feed")
     .select(selectClause)
     .order("sent_at", { ascending: false })
     .order("row_index", { ascending: true })
     .limit(limit);
 
-  if (!publicResult.error) {
-    return publicResult.data ?? [];
-  }
-
-  throw publicResult.error;
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function saveCradGuidanceRecommendation(input: {
@@ -97,7 +153,7 @@ export async function saveCradGuidanceRecommendation(input: {
     reference_no: String(input.reference_no ?? "").trim(),
   };
 
-  const { data: staffRoles, error: roleError } = await publicDb.from("user_roles").select("user_id").in("role", ["staff", "admin"]);
+  const { data: staffRoles, error: roleError } = await db.from("user_roles").select("user_id").in("role", ["staff", "admin"]);
   if (roleError) throw roleError;
 
   if (staffRoles?.length) {
@@ -110,11 +166,11 @@ export async function saveCradGuidanceRecommendation(input: {
       reference_type: "student_recommendation",
     }));
 
-    const { error: notificationError } = await publicDb.from("notifications").insert(notifications);
+    const { error: notificationError } = await db.from("notifications").insert(notifications);
     if (notificationError) throw notificationError;
   }
 
-  const { error } = await publicDb.from("audit_logs").insert({
+  const { error } = await db.from("audit_logs").insert({
     action: "STUDENT_RECOMMENDATION_RECEIVED",
     details: JSON.stringify(recommendation),
     entity_id: null,

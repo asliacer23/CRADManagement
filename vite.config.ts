@@ -1151,6 +1151,163 @@ function registrarStudentFeedApiPlugin(databaseUrl?: string) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Cashier student billing status — reads cashier tables directly from Supabase.
+// Exposes GET /api/cashier-student-billing
+// Returns billing/payment status for every student indexed by student_no so
+// CRAD can show whether a student paid (full / downpayment / partial / unpaid)
+// without needing the cashier local API server running.
+// ---------------------------------------------------------------------------
+function cashierStudentBillingApiPlugin(databaseUrl?: string) {
+  return {
+    name: "cashier-student-billing-api",
+    configureServer(server: any) {
+      server.middlewares.use("/api/cashier-student-billing", async (req: any, res: any) => {
+        if (!databaseUrl) {
+          sendJson(res, 500, { ok: false, error: "DATABASE_URL is not configured." });
+          return;
+        }
+
+        if (req.method !== "GET") {
+          sendJson(res, 405, { ok: false, error: "Method not allowed." });
+          return;
+        }
+
+        const client = new Client({
+          connectionString: databaseUrl,
+          ssl: { rejectUnauthorized: false },
+        });
+
+        try {
+          await client.connect();
+
+          const result = await client.query(`
+            SELECT
+              s.student_no,
+              s.full_name                          AS student_name,
+              s.course,
+              s.year_level,
+              b.id                                 AS billing_id,
+              b.billing_code,
+              b.billing_status,
+              b.total_amount,
+              b.paid_amount                        AS billing_paid_amount,
+              b.balance_amount,
+              b.created_at                         AS billing_created_at,
+              COALESCE(f.downpayment_amount, 0)    AS downpayment_required,
+              COALESCE(f.semester, b.semester)     AS semester,
+              COALESCE(f.academic_year, b.school_year) AS school_year,
+              COALESCE(SUM(pt.amount_paid) FILTER (WHERE pt.payment_status = 'paid'), 0) AS total_paid,
+              COUNT(pt.id) FILTER (WHERE pt.payment_status = 'paid')                     AS paid_tx_count,
+              MAX(pt.payment_date) FILTER (WHERE pt.payment_status = 'paid')             AS last_payment_date,
+              STRING_AGG(DISTINCT pt.payment_method, ', ')
+                FILTER (WHERE pt.payment_status = 'paid')                                AS payment_methods,
+              STRING_AGG(DISTINCT rr.receipt_number, ', ')
+                FILTER (WHERE rr.receipt_number IS NOT NULL)                             AS receipt_numbers
+            FROM public.students s
+            INNER JOIN public.billing_records b ON b.student_id = s.id
+            LEFT JOIN public.cashier_registrar_student_enrollment_feed f
+                   ON LOWER(TRIM(f.student_no)) = LOWER(TRIM(s.student_no))
+            LEFT JOIN public.payment_transactions pt ON pt.billing_id = b.id
+            LEFT JOIN public.receipt_records rr      ON rr.payment_id = pt.id
+            GROUP BY
+              s.student_no, s.full_name, s.course, s.year_level,
+              b.id, b.billing_code, b.billing_status,
+              b.total_amount, b.paid_amount, b.balance_amount, b.created_at,
+              f.downpayment_amount, f.semester, f.academic_year
+            ORDER BY s.student_no, b.id DESC
+          `);
+
+          // Build by-student-no map — keep the record with the highest paid amount
+          const byStudentNo: Record<string, any> = {};
+
+          for (const row of result.rows) {
+            const studentNo    = String(row.student_no || "").trim();
+            if (!studentNo) continue;
+
+            const totalPaid      = Number(row.total_paid    || 0);
+            const billingPaid    = Number(row.billing_paid_amount || 0);
+            const effectivePaid  = totalPaid > 0 ? totalPaid : billingPaid;
+            const balance        = Number(row.balance_amount || 0);
+            const totalAmount    = Number(row.total_amount   || 0);
+            const downpayReq     = Number(row.downpayment_required || 0);
+            const billingStatus  = String(row.billing_status || "unpaid");
+
+            let paymentType: string;
+            if (billingStatus === "paid" || (effectivePaid > 0 && balance <= 0)) {
+              paymentType = "full_paid";
+            } else if (effectivePaid > 0 && downpayReq > 0 && effectivePaid >= downpayReq) {
+              paymentType = "downpayment";
+            } else if (effectivePaid > 0 || billingStatus === "partial") {
+              paymentType = "partial";
+            } else {
+              paymentType = "unpaid";
+            }
+
+            const fmt = (n: number) => `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+            const entry = {
+              studentNo,
+              studentName:                  String(row.student_name || ""),
+              course:                       String(row.course       || ""),
+              yearLevel:                    String(row.year_level   || ""),
+              billingId:                    Number(row.billing_id   || 0),
+              billingCode:                  String(row.billing_code || ""),
+              semester:                     String(row.semester     || ""),
+              schoolYear:                   String(row.school_year  || ""),
+              billingStatus,
+              totalAmount,
+              totalAmountFormatted:         fmt(totalAmount),
+              paidAmount:                   effectivePaid,
+              paidAmountFormatted:          fmt(effectivePaid),
+              balanceAmount:                balance,
+              balanceAmountFormatted:       fmt(balance),
+              downpaymentRequired:          downpayReq,
+              downpaymentRequiredFormatted: fmt(downpayReq),
+              paymentType,
+              isPaid:        paymentType === "full_paid",
+              isDownpayment: paymentType === "downpayment",
+              isPartial:     paymentType === "partial",
+              paymentMethods:  String(row.payment_methods  || ""),
+              receiptNumbers:  String(row.receipt_numbers  || ""),
+              lastPaymentDate: row.last_payment_date ? new Date(row.last_payment_date).toISOString() : null,
+              billingCreatedAt: row.billing_created_at ? new Date(row.billing_created_at).toISOString() : null,
+            };
+
+            const existing = byStudentNo[studentNo];
+            if (!existing || entry.paidAmount > existing.paidAmount) {
+              byStudentNo[studentNo] = entry;
+            }
+          }
+
+          const items = Object.values(byStudentNo);
+          const paidCount    = items.filter((i) => i.paymentType === "full_paid").length;
+          const downpayCount = items.filter((i) => i.paymentType === "downpayment").length;
+          const partialCount = items.filter((i) => i.paymentType === "partial").length;
+          const unpaidCount  = items.filter((i) => i.paymentType === "unpaid").length;
+
+          sendJson(res, 200, {
+            ok: true,
+            data: {
+              stats: [
+                { title: "Fully Paid",  value: String(paidCount),    subtitle: "Complete payment confirmed" },
+                { title: "Downpayment", value: String(downpayCount), subtitle: "Met downpayment threshold" },
+                { title: "Partial",     value: String(partialCount), subtitle: "Some payment, below threshold" },
+                { title: "Unpaid",      value: String(unpaidCount),  subtitle: "No payment recorded" },
+              ],
+              byStudentNo,
+            },
+          });
+        } catch (error: any) {
+          sendJson(res, 500, { ok: false, error: error?.message || "Failed to load cashier student billing status." });
+        } finally {
+          await client.end().catch(() => {});
+        }
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -1170,6 +1327,7 @@ export default defineConfig(({ mode }) => {
       panelApprovalsApiPlugin(env.DATABASE_URL || env.SUPABASE_DB_URL),
       pmedReportsApiPlugin(env.DATABASE_URL || env.SUPABASE_DB_URL),
       registrarStudentFeedApiPlugin(env.DATABASE_URL || env.SUPABASE_DB_URL),
+      cashierStudentBillingApiPlugin(env.DATABASE_URL || env.SUPABASE_DB_URL),
     ].filter(Boolean),
     resolve: {
       alias: {

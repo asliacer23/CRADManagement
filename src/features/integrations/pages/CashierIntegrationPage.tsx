@@ -1,17 +1,27 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, CreditCard, ReceiptText, RefreshCw } from "lucide-react";
+import { ArrowLeft, BadgeCheck, BookOpen, CreditCard, ReceiptText, RefreshCw, WifiOff } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyTableState } from "@/shared/components/EmptyTableState";
-import { getCradCashierEvents, getCradCashierLinks, getCradRecentClearanceRecords } from "@/features/integrations/services/registrarIntegrationService";
+import {
+  getCradCashierEvents,
+  getCradCashierLinks,
+  getCradRecentClearanceRecords,
+  getCashierResearchPayments,
+  type CashierResearchPaymentItem,
+} from "@/features/integrations/services/registrarIntegrationService";
 
 export function CashierIntegrationPage() {
   const [clearanceRecords, setClearanceRecords] = useState<any[]>([]);
   const [paymentLinks, setPaymentLinks] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [researchPayments, setResearchPayments] = useState<CashierResearchPaymentItem[]>([]);
+  const [researchStats, setResearchStats] = useState<{ title: string; value: string; subtitle: string }[]>([]);
+  const [cashierUnavailable, setCashierUnavailable] = useState(false);
+  const [cashierError, setCashierError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -32,6 +42,20 @@ export function CashierIntegrationPage() {
       setClearanceRecords([]);
       setPaymentLinks([]);
       setEvents([]);
+    }
+
+    // Load research payment feed from cashier backend (separate, non-blocking)
+    try {
+      setCashierUnavailable(false);
+      setCashierError("");
+      const result = await getCashierResearchPayments();
+      setResearchPayments(result.items);
+      setResearchStats(result.stats);
+    } catch (err) {
+      setCashierUnavailable(true);
+      setCashierError(err instanceof Error ? err.message : "Unknown error");
+      setResearchPayments([]);
+      setResearchStats([]);
     } finally {
       setLoading(false);
     }
@@ -70,6 +94,112 @@ export function CashierIntegrationPage() {
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      {/* Research Payment Detection from Cashier */}
+      <Card className="border-emerald-200 bg-emerald-50/40">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-emerald-800">
+            <BookOpen className="h-4 w-4" />
+            Research &amp; Capstone Payments — Cashier Feed
+          </CardTitle>
+          <CardDescription>
+            Live detection of Research and Capstone fee payments recorded in the Cashier system.
+            When a student pays their research fee at the cashier window, it appears here automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {cashierUnavailable ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 space-y-1">
+              <div className="flex items-center gap-2 font-semibold">
+                <WifiOff className="h-4 w-4 shrink-0" />
+                Cashier billing data unavailable
+              </div>
+              <p className="text-amber-700 text-xs">
+                Could not query billing data from the database. Ensure{" "}
+                <code className="rounded bg-amber-100 px-1 font-mono">DATABASE_URL</code> is set in{" "}
+                <code className="rounded bg-amber-100 px-1 font-mono">.env</code>.
+              </p>
+              {cashierError && (
+                <p className="text-xs text-amber-600 break-all">{cashierError}</p>
+              )}
+            </div>
+          ) : (
+            <>
+              {researchStats.length > 0 && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {researchStats.map((stat) => (
+                    <div key={stat.title} className="rounded-lg border border-emerald-200 bg-white p-3">
+                      <p className="text-xs text-slate-500">{stat.subtitle}</p>
+                      <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+                      <p className="text-xs font-medium text-slate-600">{stat.title}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Student</th>
+                      <th className="px-4 py-3 text-left font-semibold">Fee</th>
+                      <th className="px-4 py-3 text-left font-semibold">Amount</th>
+                      <th className="px-4 py-3 text-left font-semibold">Billing Status</th>
+                      <th className="px-4 py-3 text-left font-semibold">Receipt / Reference</th>
+                      <th className="px-4 py-3 text-left font-semibold">Paid On</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!loading && researchPayments.length === 0 ? (
+                      <EmptyTableState
+                        colSpan={6}
+                        title="No research or capstone payments detected"
+                        description="No billing records with a Research/Capstone fee have been found in the cashier system yet."
+                      />
+                    ) : (
+                      researchPayments.map((item) => (
+                        <tr key={`${item.billingId}-${item.itemId}`} className="border-t border-slate-200 hover:bg-slate-50">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-900">{item.studentName || "—"}</p>
+                            <p className="text-xs text-slate-500">{item.studentNo}{item.course ? ` · ${item.course}` : ""}{item.yearLevel ? ` ${item.yearLevel}` : ""}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-slate-700">{item.itemName}</p>
+                            <p className="text-xs text-slate-400">{item.itemCode} · {item.semester} {item.schoolYear}</p>
+                          </td>
+                          <td className="px-4 py-3 font-medium text-slate-900">{item.itemAmountFormatted}</td>
+                          <td className="px-4 py-3">
+                            {item.isPaid ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                                <BadgeCheck className="h-3 w-3" /> Paid
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700 capitalize">
+                                {item.billingStatus}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-slate-700">{item.receiptNumber || item.referenceNumber || "—"}</p>
+                            {item.paymentMethod && <p className="text-xs text-slate-400">{item.paymentMethod}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500 text-xs">
+                            {item.paymentDate
+                              ? format(new Date(item.paymentDate), "MMM d, yyyy")
+                              : item.billingCreatedAt
+                              ? format(new Date(item.billingCreatedAt), "MMM d, yyyy")
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <section className="grid gap-4 md:grid-cols-3">
         <Card><CardHeader className="pb-3"><CardDescription>Clearance records</CardDescription><CardTitle>{clearanceRecords.length}</CardTitle></CardHeader></Card>
