@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from "@/integrations/supabase/client";
 import type { User as SupaUser, Session } from "@supabase/supabase-js";
 
-const crad = supabase.schema("crad") as any;
+const db = supabase as any;
 
 export type UserRole = "student" | "adviser" | "staff" | "admin";
 
@@ -59,12 +59,12 @@ const TEMP_BYPASS_USERS: Record<string, { password: string; user: AppUser }> = {
 };
 
 async function fetchAppUser(supaUser: SupaUser): Promise<AppUser | null> {
-  const { data: profile } = await crad.from("profiles")
+  const { data: profile } = await db.from("profiles")
     .select("full_name, avatar_url")
     .eq("user_id", supaUser.id)
     .single();
 
-  const { data: roleData } = await crad.from("user_roles")
+  const { data: roleData } = await db.from("user_roles")
     .select("role")
     .eq("user_id", supaUser.id)
     .single();

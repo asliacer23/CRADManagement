@@ -7,8 +7,59 @@ import { EmptyTableState } from "@/shared/components/EmptyTableState";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
+function getBypassPanelApprovals(userId: string) {
+  const rows = [
+    {
+      id: "45000000-0000-0000-0000-000000000202",
+      defense_date: new Date(Date.now() - 2 * 86400000).toISOString(),
+      defense_time: "13:00",
+      room: "Research Hall A",
+      status: "completed",
+      research: {
+        id: "40000000-0000-0000-0000-000000000203",
+        title: "AI-Powered Attendance Analytics for Student Intervention",
+        research_code: "R-2026-203",
+        submitted_by: "d50e8400-e29b-41d4-a716-446655440005",
+        profiles: { full_name: "Ana Reyes" },
+        research_members: [
+          { member_name: "Ana Reyes", is_leader: true },
+          { member_name: "Paolo Ramos", is_leader: false },
+        ],
+      },
+      defense_panel_members: [
+        { panelist_id: "d50e8400-e29b-41d4-a716-446655440003", role: "leader", profiles: { full_name: "Prof. Maria Santos" } },
+        { panelist_id: "d50e8400-e29b-41d4-a716-446655440001", role: "panelist", profiles: { full_name: "CRAD Admin" } },
+      ],
+      grades: [
+        { id: "55000000-0000-0000-0000-000000000201", grade: 95.5, remarks: "Strong methodology and complete documentation.", profiles: { full_name: "Prof. Maria Santos" } },
+        { id: "55000000-0000-0000-0000-000000000202", grade: 93, remarks: "Approved with minor formatting refinements.", profiles: { full_name: "CRAD Admin" } },
+      ],
+    },
+    {
+      id: "45000000-0000-0000-0000-000000000203",
+      defense_date: new Date(Date.now() - 15 * 86400000).toISOString(),
+      defense_time: "10:30",
+      room: "Research Hall B",
+      status: "completed",
+      research: {
+        id: "40000000-0000-0000-0000-000000000204",
+        title: "Community Research Repository and Archival Dashboard",
+        research_code: "R-2026-204",
+        submitted_by: "d50e8400-e29b-41d4-a716-446655440005",
+        profiles: { full_name: "Ana Reyes" },
+        research_members: [{ member_name: "Ana Reyes", is_leader: true }],
+      },
+      defense_panel_members: [{ panelist_id: "d50e8400-e29b-41d4-a716-446655440003", role: "leader", profiles: { full_name: "Prof. Maria Santos" } }],
+      grades: [{ id: "55000000-0000-0000-0000-000000000203", grade: 96, remarks: "Ready for final acceptance.", profiles: { full_name: "Prof. Maria Santos" } }],
+    },
+  ];
+
+  return rows.filter((row) => row.defense_panel_members.some((member) => member.panelist_id === userId));
+}
+
 export const PanelApprovalsPage: React.FC = () => {
   const { user } = useAuth();
+  const db = supabase as any;
   const [defenses, setDefenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -28,7 +79,41 @@ export const PanelApprovalsPage: React.FC = () => {
       }
 
       try {
-        const { data: panelData, error: panelErr } = await supabase
+        const response = await fetch(
+          `/api/panel-approvals?panelistId=${encodeURIComponent(user.id)}&role=${encodeURIComponent(user.role)}`
+        );
+        const payload = await response.json();
+
+        if (response.ok && payload?.ok && Array.isArray(payload.data)) {
+          const dbDefenses = payload.data;
+          const rolesMap: Record<string, string> = {};
+          dbDefenses.forEach((defense: any) => {
+            const role =
+              defense.my_role ||
+              defense.defense_panel_members.find((member: any) => member.panelist_id === user.id)?.role ||
+              (user.role === "admin" ? "admin" : "");
+            if (role) rolesMap[defense.id] = role;
+          });
+          setUserRoles(rolesMap);
+          setDefenses(dbDefenses);
+          setLoading(false);
+          return;
+        }
+
+        if (user.isBypass) {
+          const bypassDefenses = getBypassPanelApprovals(user.id);
+          const rolesMap: Record<string, string> = {};
+          bypassDefenses.forEach((defense) => {
+            const myPanel = defense.defense_panel_members.find((member) => member.panelist_id === user.id);
+            if (myPanel) rolesMap[defense.id] = myPanel.role;
+          });
+          setUserRoles(rolesMap);
+          setDefenses(bypassDefenses);
+          setLoading(false);
+          return;
+        }
+
+        const { data: panelData, error: panelErr } = await db
           .from("defense_panel_members")
           .select("defense_id, role")
           .eq("panelist_id", user.id);
@@ -49,27 +134,67 @@ export const PanelApprovalsPage: React.FC = () => {
 
         const defenseIds = panelData.map((panel: any) => panel.defense_id);
 
-        const { data: defensesData, error: defensesErr } = await supabase
+        const { data: defensesData, error: defensesErr } = await db
           .from("defense_schedules")
-          .select("*, defense_panel_members(*), research(id, title, research_code, submitted_by, research_members(member_name, is_leader), profiles!research(full_name))")
+          .select("*")
           .in("id", defenseIds)
           .eq("status", "completed");
 
         if (defensesErr) throw defensesErr;
 
+        if (!defensesData?.length) {
+          setDefenses([]);
+          setLoading(false);
+          return;
+        }
+
+        const researchIds = Array.from(new Set((defensesData || []).map((defense: any) => defense.research_id).filter(Boolean)));
+
+        const [{ data: researchData, error: researchErr }, { data: panelMembersData, error: panelMembersErr }] = await Promise.all([
+          db
+            .from("research")
+            .select("id, title, research_code, submitted_by, research_members(member_name, is_leader), profiles!submitted_by(full_name)")
+            .in("id", researchIds),
+          db
+            .from("defense_panel_members")
+            .select("defense_id, panelist_id, role, profiles!panelist_id(full_name)")
+            .in("defense_id", defenseIds),
+        ]);
+
+        if (researchErr) throw researchErr;
+        if (panelMembersErr) throw panelMembersErr;
+
+        const researchById = new Map((researchData || []).map((research: any) => [research.id, research]));
+        const panelMembersByDefenseId = new Map<string, any[]>();
+        (panelMembersData || []).forEach((member: any) => {
+          const list = panelMembersByDefenseId.get(member.defense_id) || [];
+          list.push(member);
+          panelMembersByDefenseId.set(member.defense_id, list);
+        });
+
         const enriched = await Promise.all(
           (defensesData || []).map(async (defense: any) => {
-            const { data: grades, error: gradesErr } = await supabase
+            const { data: grades, error: gradesErr } = await db
               .from("defense_grades")
               .select("*, profiles!panelist_id(full_name)")
               .eq("defense_id", defense.id);
 
             if (gradesErr) {
               console.error("Error fetching grades:", gradesErr);
-              return { ...defense, grades: [] };
+              return {
+                ...defense,
+                defense_panel_members: panelMembersByDefenseId.get(defense.id) || [],
+                research: researchById.get(defense.research_id) || null,
+                grades: [],
+              };
             }
 
-            return { ...defense, grades: grades || [] };
+            return {
+              ...defense,
+              defense_panel_members: panelMembersByDefenseId.get(defense.id) || [],
+              research: researchById.get(defense.research_id) || null,
+              grades: grades || [],
+            };
           })
         );
 
@@ -108,7 +233,7 @@ export const PanelApprovalsPage: React.FC = () => {
 
       const noteContent = `Panel Leader Decision: ${decision.toUpperCase()}\nRemarks: ${remarks[defenseId] || "No remarks provided"}\nDecision Date: ${new Date().toISOString()}`;
 
-      const { error } = await supabase
+      const { error } = await db
         .from("defense_schedules")
         .update({ notes: noteContent })
         .eq("id", defenseId);

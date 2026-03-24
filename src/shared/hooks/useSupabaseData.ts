@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "./useAuth";
 
-const crad = supabase.schema("crad") as any;
+const publicDb = supabase as any;
+const crad = publicDb;
 
 function getBypassAdminDashboardData() {
   return {
@@ -130,6 +131,24 @@ function getBypassDefenseSchedules() {
   ];
 }
 
+async function readDefenseSchedulesApi(pathname: string, init?: RequestInit) {
+  const response = await fetch(pathname, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    ...init,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(payload?.error || "Failed to load defense schedule data.");
+  }
+
+  return payload?.data;
+}
+
 // ==================== RESEARCH ====================
 export function useMyResearch() {
   const { user } = useAuth();
@@ -159,6 +178,30 @@ export function useAllResearch() {
       return data;
     },
     staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useSchedulableResearch() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["schedulable-research", user?.id],
+    queryFn: async () => {
+      if (user?.isBypass) {
+        return readDefenseSchedulesApi("/api/defense-schedules/options");
+      }
+
+      const { data, error } = await crad.from("research")
+        .select("id, title, research_code, submitted_by, departments(code, name), research_members(member_name, is_leader)")
+        .eq("status", "approved")
+        .order("updated_at", { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 2,
+    retry: user?.isBypass ? false : 1,
   });
 }
 
@@ -485,7 +528,11 @@ export function useDefenseSchedules() {
     queryKey: ["defense-schedules", user?.id],
     queryFn: async () => {
       if (user?.isBypass) {
-        return getBypassDefenseSchedules();
+        try {
+          return await readDefenseSchedulesApi("/api/defense-schedules");
+        } catch {
+          return getBypassDefenseSchedules();
+        }
       }
 
       const { data, error } = await crad.from("defense_schedules")
@@ -507,6 +554,20 @@ export function useCreateDefense() {
     mutationFn: async ({ researchId, date, time, room, panelistIds }: {
       researchId: string; date: string; time: string; room: string; panelistIds?: string[];
     }) => {
+      if (user?.isBypass) {
+        return readDefenseSchedulesApi("/api/defense-schedules", {
+          method: "POST",
+          body: JSON.stringify({
+            researchId,
+            date,
+            time,
+            room,
+            panelistIds,
+            createdBy: user.id,
+          }),
+        });
+      }
+
       const { data, error } = await crad.from("defense_schedules")
         .insert({ research_id: researchId, defense_date: date, defense_time: time, room, created_by: user!.id })
         .select("*, research(title, submitted_by)")
@@ -541,6 +602,13 @@ export function useUpdateDefenseStatus() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ defenseId, status }: { defenseId: string; status: "scheduled" | "completed" | "cancelled" }) => {
+      if (user?.isBypass) {
+        return readDefenseSchedulesApi("/api/defense-schedules", {
+          method: "PATCH",
+          body: JSON.stringify({ defenseId, status }),
+        });
+      }
+
       const { error } = await crad.from("defense_schedules")
         .update({ status, updated_at: new Date().toISOString() })
         .eq("id", defenseId);
@@ -680,6 +748,27 @@ export function useCreateAnnouncement() {
         body: { action: "announcement_created", data: { title, announcement_id: data.id, actor_id: user!.id } },
       }).catch(() => {});
 
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+  });
+}
+
+export function useUpdateAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, title, content, isPinned }: { id: string; title: string; content: string; isPinned: boolean }) => {
+      const { data, error } = await crad.from("announcements")
+        .update({
+          title,
+          content,
+          is_pinned: isPinned,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
@@ -1117,7 +1206,16 @@ export function useUpdateDefenseSchedule() {
       status: string;
     }) => {
       if (user?.isBypass) {
-        return { id: defenseId, defense_date, defense_time, room, status };
+        return readDefenseSchedulesApi("/api/defense-schedules", {
+          method: "PATCH",
+          body: JSON.stringify({
+            defenseId,
+            defense_date,
+            defense_time,
+            room,
+            status,
+          }),
+        });
       }
 
       const { data, error } = await crad.from("defense_schedules")
@@ -1519,9 +1617,9 @@ export function useFinalApprovalsWithGrades() {
       // Fetch defense grades for each
       const enriched = await Promise.all(
         (data || []).map(async (approval: any) => {
-          const { data: grades, error: gradesError } = await crad.from("defense_grades")
-            .select("*, profiles!panelist_id(full_name)")
-            .eq("research_id", approval.research_id);
+            const { data: grades, error: gradesError } = await crad.from("defense_grades")
+              .select("*, profiles!panelist_id(full_name)")
+              .eq("research_id", approval.research_id);
           if (gradesError) {
             console.error("Error fetching grades:", gradesError);
             return { ...approval, defense_grades: [] };

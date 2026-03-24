@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Calendar, CheckCircle2, Clock, Eye, MapPin, Pencil, Users } from "lucide-react";
+import { AlertCircle, Calendar, CheckCircle2, Clock, Eye, MapPin, Pencil, Plus, Users } from "lucide-react";
 import { format } from "date-fns";
 import { StatusBadge } from "@/shared/components/StatusBadge";
-import { useDefenseGrades, useDefenseSchedules, useSubmitDefenseGrade, useUpdateDefenseGrade, useUpdateDefenseSchedule } from "@/shared/hooks/useSupabaseData";
+import { useCreateDefense, useDefenseGrades, useDefenseSchedules, useSchedulableResearch, useSubmitDefenseGrade, useUpdateDefenseGrade, useUpdateDefenseSchedule } from "@/shared/hooks/useSupabaseData";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useSnackbar } from "@/shared/components/SnackbarProvider";
 import { DataTableToolbar } from "@/shared/components/DataTableToolbar";
@@ -21,7 +21,9 @@ function getGroupNumber(schedule: any) {
 }
 
 export const DefenseSchedulePage: React.FC = () => {
-  const { data: schedules, isLoading, isError, error } = useDefenseSchedules();
+  const { data: schedules, isLoading, isError, error, refetch } = useDefenseSchedules();
+  const { data: schedulableResearch, isLoading: researchOptionsLoading } = useSchedulableResearch();
+  const createDefense = useCreateDefense();
   const updateDefenseSchedule = useUpdateDefenseSchedule();
   const { show } = useSnackbar();
   const { user } = useAuth();
@@ -30,7 +32,14 @@ export const DefenseSchedulePage: React.FC = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [membersModalSchedule, setMembersModalSchedule] = useState<any | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<any | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [localSchedules, setLocalSchedules] = useState<any[]>([]);
+  const [createForm, setCreateForm] = useState({
+    researchId: "",
+    defense_date: "",
+    defense_time: "",
+    room: "",
+  });
   const [editForm, setEditForm] = useState({
     defense_date: "",
     defense_time: "",
@@ -63,11 +72,64 @@ export const DefenseSchedulePage: React.FC = () => {
     [localSchedules, search, statusFilter]
   );
 
+  const canManageSchedules = user?.role === "admin" || user?.role === "staff";
+
+  const activeScheduledResearchIds = useMemo(() => {
+    return new Set(
+      (localSchedules || [])
+        .filter((schedule: any) => schedule.status !== "cancelled")
+        .map((schedule: any) => schedule.research?.id || schedule.research_id)
+        .filter(Boolean)
+    );
+  }, [localSchedules]);
+
+  const availableResearch = useMemo(
+    () =>
+      (schedulableResearch || []).filter((research: any) => !activeScheduledResearchIds.has(research.id)),
+    [schedulableResearch, activeScheduledResearchIds]
+  );
+
+  const selectedResearch = useMemo(
+    () => availableResearch.find((research: any) => research.id === createForm.researchId) || null,
+    [availableResearch, createForm.researchId]
+  );
+
   const stats = [
     { label: "Total", value: localSchedules?.length || 0 },
     { label: "Scheduled", value: (localSchedules || []).filter((schedule: any) => schedule.status === "scheduled").length },
     { label: "Completed", value: (localSchedules || []).filter((schedule: any) => schedule.status === "completed").length },
   ];
+
+  function closeCreateDialog() {
+    setIsCreateDialogOpen(false);
+    setCreateForm({
+      researchId: "",
+      defense_date: "",
+      defense_time: "",
+      room: "",
+    });
+  }
+
+  async function handleCreateSchedule() {
+    if (!createForm.researchId || !createForm.defense_date || !createForm.defense_time || !createForm.room.trim()) {
+      show("Research, date, time, and room are required.", "error");
+      return;
+    }
+
+    try {
+      await createDefense.mutateAsync({
+        researchId: createForm.researchId,
+        date: createForm.defense_date,
+        time: createForm.defense_time,
+        room: createForm.room.trim(),
+      });
+      await refetch();
+      show("Defense schedule added successfully.", "success");
+      closeCreateDialog();
+    } catch (err: any) {
+      show(err?.message || "Failed to add defense schedule.", "error");
+    }
+  }
 
   async function handleSaveEdit() {
     if (!editingSchedule) return;
@@ -137,6 +199,14 @@ export const DefenseSchedulePage: React.FC = () => {
               ],
             },
           ]}
+          actions={
+            canManageSchedules ? (
+              <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add Defense Schedule
+              </Button>
+            ) : null
+          }
           stats={stats.map((item) => (
             <div key={item.label} className="rounded-lg border border-border bg-card px-3 py-2">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{item.label}</p>
@@ -220,6 +290,116 @@ export const DefenseSchedulePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => !open && closeCreateDialog()}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Defense Schedule</DialogTitle>
+            <DialogDescription>
+              Create a new defense schedule and push it into the live CRAD defense table.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-foreground">Research</label>
+              <select
+                value={createForm.researchId}
+                onChange={(event) => setCreateForm({ ...createForm, researchId: event.target.value })}
+                className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                disabled={researchOptionsLoading || !availableResearch.length}
+              >
+                <option value="">
+                  {researchOptionsLoading ? "Loading research..." : availableResearch.length ? "Select research" : "No available research"}
+                </option>
+                {availableResearch.map((research: any) => (
+                  <option key={research.id} value={research.id}>
+                    {research.research_code} - {research.title}
+                  </option>
+                ))}
+              </select>
+              {!researchOptionsLoading && !availableResearch.length && (
+                <p className="text-xs text-muted-foreground">
+                  Approved research without an active defense schedule will appear here.
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground">Section</label>
+                <input
+                  value={selectedResearch?.departments?.code || "N/A"}
+                  disabled
+                  className="h-10 rounded-lg border border-input bg-muted px-3 text-sm text-muted-foreground"
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground">Group No.</label>
+                <input
+                  value={selectedResearch ? getGroupNumber({ research: selectedResearch }) : "N/A"}
+                  disabled
+                  className="h-10 rounded-lg border border-input bg-muted px-3 text-sm text-muted-foreground"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground">Defense Date</label>
+                <input
+                  type="date"
+                  value={createForm.defense_date}
+                  onChange={(event) => setCreateForm({ ...createForm, defense_date: event.target.value })}
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground">Time</label>
+                <input
+                  type="time"
+                  value={createForm.defense_time}
+                  onChange={(event) => setCreateForm({ ...createForm, defense_time: event.target.value })}
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-foreground">Room</label>
+              <input
+                value={createForm.room}
+                onChange={(event) => setCreateForm({ ...createForm, room: event.target.value })}
+                placeholder="e.g., Research Hall C"
+                className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+              />
+            </div>
+
+            {selectedResearch?.research_members?.length ? (
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Group Members</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedResearch.research_members.map((member: any, index: number) => (
+                    <span key={`${member.member_name}-${index}`} className="rounded-full border border-border bg-background px-3 py-1 text-xs text-foreground">
+                      {member.member_name}
+                      {member.is_leader ? " • Leader" : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={closeCreateDialog}>Cancel</Button>
+              <Button
+                onClick={handleCreateSchedule}
+                disabled={createDefense.isPending || researchOptionsLoading || !availableResearch.length}
+              >
+                {createDefense.isPending ? "Creating..." : "Create Schedule"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!membersModalSchedule} onOpenChange={(open) => !open && setMembersModalSchedule(null)}>
         <DialogContent className="sm:max-w-xl">
