@@ -1,11 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const cradViews = supabase.schema("crad") as any;
-const publicDb = supabase as any;
+const db = supabase as any;
 
 export async function getCradFlowProfile() {
-  const { data, error } = await cradViews
-    .from("department_flow_profiles")
+  const { data, error } = await db
+    .from("crad_department_flow_profiles")
     .select("*")
     .eq("department_key", "crad")
     .maybeSingle();
@@ -15,8 +14,8 @@ export async function getCradFlowProfile() {
 }
 
 export async function getCradRecentClearanceRecords() {
-  const { data, error } = await cradViews
-    .from("department_clearance_records")
+  const { data, error } = await db
+    .from("crad_cashier_clearance_records")
     .select("*")
     .eq("department_key", "crad")
     .order("created_at", { ascending: false })
@@ -27,8 +26,8 @@ export async function getCradRecentClearanceRecords() {
 }
 
 export async function getCradCashierLinks() {
-  const { data, error } = await cradViews
-    .from("cashier_payment_links")
+  const { data, error } = await db
+    .from("crad_cashier_payment_links")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(20);
@@ -38,8 +37,8 @@ export async function getCradCashierLinks() {
 }
 
 export async function getCradCashierEvents() {
-  const { data, error } = await cradViews
-    .from("cashier_integration_events")
+  const { data, error } = await db
+    .from("crad_cashier_sync_events")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(20);

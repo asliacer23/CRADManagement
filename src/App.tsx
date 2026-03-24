@@ -34,6 +34,7 @@ import { GuidanceRecommendationsPage } from "@/features/integrations/pages/Guida
 import { CashierIntegrationPage } from "@/features/integrations/pages/CashierIntegrationPage";
 import { PmedReportsPage } from "@/features/integrations/pages/PmedReportsPage";
 import { HrStaffRequestPage } from "@/features/integrations/pages/HrStaffRequestPage";
+import { ComlabUnitRequestPage } from "@/features/integrations/pages/ComlabUnitRequestPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -75,6 +76,7 @@ const ProtectedRoutes = () => {
         <Route path="/integrations/cashier" element={<CashierIntegrationPage />} />
         <Route path="/integrations/pmed/reports" element={<PmedReportsPage />} />
         <Route path="/integrations/hr-staff-request" element={<HrStaffRequestPage />} />
+        <Route path="/integrations/comlab/unit-request" element={<ComlabUnitRequestPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
