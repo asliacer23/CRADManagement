@@ -1,7 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 import { Client } from "pg";
 import { randomUUID } from "crypto";
 
@@ -1171,7 +1170,6 @@ export default defineConfig(({ mode }) => {
       panelApprovalsApiPlugin(env.DATABASE_URL || env.SUPABASE_DB_URL),
       pmedReportsApiPlugin(env.DATABASE_URL || env.SUPABASE_DB_URL),
       registrarStudentFeedApiPlugin(env.DATABASE_URL || env.SUPABASE_DB_URL),
-      mode === "development" && componentTagger(),
     ].filter(Boolean),
     resolve: {
       alias: {
